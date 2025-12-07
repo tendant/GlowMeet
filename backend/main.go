@@ -386,9 +386,9 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2. Fallback to default top 5 if no specific matches found
+	// 2. Fallback to default top 8 if no specific matches found
 	if len(out) == 0 {
-		users := s.users.top(5)
+		users := s.users.top(8)
 		out = make([]userSummary, 0, len(users))
 		for _, u := range users {
 			// Skip self if logged in (optional but good UI)

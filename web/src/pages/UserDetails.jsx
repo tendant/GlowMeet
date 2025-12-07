@@ -85,7 +85,7 @@ const UserDetails = () => {
                         <img src={user.bgImage} alt="AI Generated Background" className="bg-image" />
                         <h1 className="details-username-hero">{user.username}</h1>
                         <p className="ai-summary">
-                            {user.match_info?.shared_summary || user.summary}
+                            {user.match_info?.reason || user.summary}
                         </p>
                     </div>
                 </section>

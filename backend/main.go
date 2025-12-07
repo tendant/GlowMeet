@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"glowmeet/location"
 	"glowmeet/matching"
 	"glowmeet/xai"
 	"io"
@@ -341,7 +340,6 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 		ProfileImage  string   `json:"profile_image_url,omitempty"`
 		Lat           float64  `json:"lat,omitempty"`
 		Long          float64  `json:"long,omitempty"`
-		Distance      *float64 `json:"distance_ft,omitempty"` // Pointer to allow null if calculating failed
 		MatchingScore float64  `json:"matching_score,omitempty"`
 		MatchReason   string   `json:"match_reason,omitempty"`
 		Summary       string   `json:"summary,omitempty"`
@@ -351,20 +349,6 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var out []userSummary
-
-	// Viewer location for distance calc
-	var viewerLat, viewerLong float64
-	var hasViewerLoc bool
-	if viewerID != "" {
-		if v, ok := s.users.get(viewerID); ok {
-			viewerLat = v.Lat
-			viewerLong = v.Long
-			// valid if not 0,0 (simplistic check, but 0,0 is in ocean mostly)
-			if viewerLat != 0 || viewerLong != 0 {
-				hasViewerLoc = true
-			}
-		}
-	}
 
 	// 1. Try to get Top Matches if logged in
 	if viewerID != "" {
@@ -376,13 +360,6 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 				if !ok {
 					continue
 				}
-
-				var dist *float64
-				if hasViewerLoc && (u.Lat != 0 || u.Long != 0) {
-					d := location.CalculateDistance(viewerLat, viewerLong, u.Lat, u.Long)
-					dist = &d
-				}
-
 				tweets := s.tweets.get(u.ID)
 				out = append(out, userSummary{
 					UserID:        u.ID,
@@ -391,7 +368,6 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 					ProfileImage:  u.ProfileImageURL,
 					Lat:           u.Lat,
 					Long:          u.Long,
-					Distance:      dist,
 					MatchingScore: m.Score,
 					MatchReason:   m.Reason,
 					Summary:       u.Summary,
@@ -417,13 +393,6 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 			if u.ID == viewerID {
 				continue
 			}
-
-			var dist *float64
-			if hasViewerLoc && (u.Lat != 0 || u.Long != 0) {
-				d := location.CalculateDistance(viewerLat, viewerLong, u.Lat, u.Long)
-				dist = &d
-			}
-
 			tweets := s.tweets.get(u.ID)
 			out = append(out, userSummary{
 				UserID:        u.ID,
@@ -432,7 +401,6 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 				ProfileImage:  u.ProfileImageURL,
 				Lat:           u.Lat,
 				Long:          u.Long,
-				Distance:      dist,
 				MatchingScore: u.MatchingScore,
 				Summary:       u.Summary,
 				Description:   u.Description,

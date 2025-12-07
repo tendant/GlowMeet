@@ -5,6 +5,6 @@ backend:
 	cd backend && go run main.go
 
 backend-watch:
-	cd backend && arelo -p . -- go run main.go
+	cd backend && arelo -p ./... -- go run .
 
 .PHONY: web backend backend-watch

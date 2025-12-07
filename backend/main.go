@@ -54,6 +54,7 @@ type server struct {
 	states *stateStore
 	users  *userStore
 	tokens *tokenStore
+	tweets *tweetStore
 }
 
 func main() {
@@ -117,6 +118,7 @@ func newServer(cfg *Config) *server {
 		states: newStateStore(10 * time.Minute),
 		users:  newUserStore(50),
 		tokens: newTokenStore(200),
+		tweets: newTweetStore(50),
 	}
 
 	s.seedUsers()
@@ -227,6 +229,7 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 	} else if profile.ID != "" {
 		log.Printf("req_id=%s profile fetched login id=%s username=%s", middleware.GetReqID(r.Context()), profile.ID, profile.Username)
 		s.users.upsert(profile)
+		go s.fetchUserTweets(profile.ID, token.AccessToken)
 	}
 
 	s.tokens.upsert(sessionID, tokenInfo{
@@ -294,24 +297,30 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if profile.ID != "" {
+		profile.Tweets = s.tweets.get(profile.ID)
+	}
+
 	writeJSON(w, http.StatusOK, profile)
 }
 
 func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 	users := s.users.top(20)
 	type userSummary struct {
-		UserID        string  `json:"user_id"`
-		Name          string  `json:"name,omitempty"`
-		Username      string  `json:"username,omitempty"`
-		ProfileImage  string  `json:"profile_image_url,omitempty"`
-		Lat           float64 `json:"lat,omitempty"`
-		Long          float64 `json:"long,omitempty"`
-		MatchingScore float64 `json:"matching_score,omitempty"`
-		Description   string  `json:"description,omitempty"`
+		UserID        string   `json:"user_id"`
+		Name          string   `json:"name,omitempty"`
+		Username      string   `json:"username,omitempty"`
+		ProfileImage  string   `json:"profile_image_url,omitempty"`
+		Lat           float64  `json:"lat,omitempty"`
+		Long          float64  `json:"long,omitempty"`
+		MatchingScore float64  `json:"matching_score,omitempty"`
+		Description   string   `json:"description,omitempty"`
+		Tweets        []string `json:"tweets,omitempty"`
 	}
 
 	out := make([]userSummary, 0, len(users))
 	for _, u := range users {
+		tweets := s.tweets.get(u.ID)
 		out = append(out, userSummary{
 			UserID:        u.ID,
 			Name:          u.Name,
@@ -321,6 +330,18 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 			Long:          u.Long,
 			MatchingScore: u.MatchingScore,
 			Description:   u.Description,
+			// Return a sample tweet text to give clients something to show.
+			// Full list available via /api/me.
+			// Avoid large payloads by sending only the first tweet text if present.
+			// Keep field name as tweets for consistency.
+			// Empty slice omitted by JSON encoder.
+			// Use inline literal to avoid restructuring API.
+			Tweets: func() []string {
+				if len(tweets) > 0 {
+					return []string{tweets[0]}
+				}
+				return nil
+			}(),
 		})
 	}
 
@@ -437,17 +458,17 @@ func pkceChallenge(verifier string) string {
 }
 
 type userProfile struct {
-	ID              string  `json:"id"`
-	Name            string  `json:"name"`
-	Username        string  `json:"username"`
-	ProfileImageURL string  `json:"profile_image_url,omitempty"`
-	Lat             float64 `json:"lat,omitempty"`
-	Long            float64 `json:"long,omitempty"`
-	Summary         string  `json:"summary,omitempty"`
-	BgImage         string  `json:"bg_image,omitempty"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Username        string   `json:"username"`
+	ProfileImageURL string   `json:"profile_image_url,omitempty"`
+	Lat             float64  `json:"lat,omitempty"`
+	Long            float64  `json:"long,omitempty"`
+	Summary         string   `json:"summary,omitempty"`
+	BgImage         string   `json:"bg_image,omitempty"`
 	Tweets          []string `json:"tweets,omitempty"`
-	MatchingScore   float64 `json:"matching_score,omitempty"`
-	Description     string  `json:"description,omitempty"`
+	MatchingScore   float64  `json:"matching_score,omitempty"`
+	Description     string   `json:"description,omitempty"`
 }
 
 type userStore struct {
@@ -469,6 +490,13 @@ type tokenStore struct {
 	data map[string]tokenInfo
 }
 
+type tweetStore struct {
+	mu          sync.Mutex
+	lim         int
+	data        map[string][]string
+	lastFetched map[string]time.Time
+}
+
 func newUserStore(limit int) *userStore {
 	return &userStore{
 		lim:  limit,
@@ -480,6 +508,14 @@ func newTokenStore(limit int) *tokenStore {
 	return &tokenStore{
 		lim:  limit,
 		data: make(map[string]tokenInfo),
+	}
+}
+
+func newTweetStore(limit int) *tweetStore {
+	return &tweetStore{
+		lim:         limit,
+		data:        make(map[string][]string),
+		lastFetched: make(map[string]time.Time),
 	}
 }
 
@@ -585,6 +621,43 @@ func (s *tokenStore) get(sessionID string) (tokenInfo, bool) {
 	return token, ok
 }
 
+func (s *tweetStore) set(userID string, tweets []string) {
+	if userID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(tweets) > s.lim {
+		tweets = tweets[:s.lim]
+	}
+	clone := append([]string(nil), tweets...)
+	s.data[userID] = clone
+	s.lastFetched[userID] = time.Now()
+}
+
+func (s *tweetStore) get(userID string) []string {
+	if userID == "" {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tweets := s.data[userID]
+	return append([]string(nil), tweets...)
+}
+
+func (s *tweetStore) shouldFetch(userID string, minInterval time.Duration) bool {
+	if userID == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	last, ok := s.lastFetched[userID]
+	if !ok {
+		return true
+	}
+	return time.Since(last) > minInterval
+}
+
 func (s *server) fetchXUser(ctx context.Context, accessToken string) (userProfile, error) {
 	if accessToken == "" {
 		return userProfile{}, errors.New("missing access token")
@@ -618,6 +691,59 @@ func (s *server) fetchXUser(ctx context.Context, accessToken string) (userProfil
 		return userProfile{}, errors.New("missing id in x.com response")
 	}
 	return payload.Data, nil
+}
+
+func (s *server) fetchUserTweets(userID, accessToken string) {
+	if userID == "" || accessToken == "" {
+		return
+	}
+	if !s.tweets.shouldFetch(userID, 15*time.Minute) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	url := fmt.Sprintf("https://api.twitter.com/2/users/%s/tweets?max_results=5&tweet.fields=created_at,text", userID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		log.Printf("fetch tweets build request err for user=%s: %v", userID, err)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Printf("fetch tweets http err for user=%s: %v", userID, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("fetch tweets failed user=%s status=%d body=%s", userID, resp.StatusCode, string(body))
+		// mark a fetch attempt to avoid hammering when rate limited
+		s.tweets.set(userID, s.tweets.get(userID))
+		return
+	}
+
+	var payload struct {
+		Data []struct {
+			ID        string `json:"id"`
+			Text      string `json:"text"`
+			CreatedAt string `json:"created_at"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		log.Printf("fetch tweets unmarshal err for user=%s: %v", userID, err)
+		return
+	}
+
+	texts := make([]string, 0, len(payload.Data))
+	for _, t := range payload.Data {
+		texts = append(texts, t.Text)
+	}
+	log.Printf("fetched %d tweets for user=%s", len(texts), userID)
+	s.tweets.set(userID, texts)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {

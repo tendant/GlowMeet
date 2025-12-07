@@ -35,6 +35,7 @@ type Config struct {
 	FrontendURL   string
 	JWTSecret     string
 	JWTTTL        time.Duration
+	XAiAPIKey     string
 }
 
 type stateEntry struct {
@@ -84,6 +85,7 @@ func loadConfig() (*Config, error) {
 		FrontendURL:   getEnv("FRONTEND_URL", "/"),
 		JWTSecret:     os.Getenv("APP_JWT_SECRET"),
 		JWTTTL:        getEnvDuration("APP_JWT_TTL", 24*time.Hour),
+		XAiAPIKey:     os.Getenv("XAI_API_KEY"),
 	}
 
 	if cfg.ClientID == "" {

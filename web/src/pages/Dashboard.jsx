@@ -1,15 +1,25 @@
 import { useState, useContext, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import UserContext from "../context/UserContext";
 import Header from "../components/Header";
 import "./Dashboard.css";
 
 const Dashboard = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const user = useContext(UserContext);
-    const [isActive, setIsActive] = useState(false);
+
+    // Initialize state from navigation state if available (e.g. coming back from UserDetails)
+    const [isActive, setIsActive] = useState(location.state?.active || false);
     const [matches, setMatches] = useState([]);
     const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
+    // Fetch matches immediately if we're starting in active state
+    useEffect(() => {
+        if (isActive && matches.length === 0) {
+            fetchMatches();
+        }
+    }, [isActive]);
 
     const fetchMatches = async () => {
         let sorted = [];

@@ -7,4 +7,7 @@ backend:
 backend-watch:
 	cd backend && arelo -p ./... -- go run .
 
-.PHONY: web backend backend-watch
+test:
+	cd backend && go test -v ./...
+
+.PHONY: web backend backend-watch test

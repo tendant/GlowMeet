@@ -37,7 +37,7 @@ const UserDetails = () => {
         }
     }, [userId, apiBase]);
 
-    const goBack = () => navigate(-1);
+    const goBack = () => navigate('/', { state: { active: true } });
 
     if (loading) {
         return (

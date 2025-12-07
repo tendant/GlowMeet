@@ -10,20 +10,31 @@ const Dashboard = () => {
     const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
     const fetchMatches = async () => {
+        let sorted = [];
         try {
             const response = await fetch(`${apiBase}/api/users`);
             if (response.ok) {
                 const users = await response.json();
                 // Get top 4 by matching_score
-                const sorted = users
+                sorted = users
                     .filter(u => u.user_id !== user?.id) // Exclude self
-                    .sort((a, b) => b.matching_score - a.matching_score)
-                    .slice(0, 4);
-                setMatches(sorted);
+                    .sort((a, b) => b.matching_score - a.matching_score);
             }
         } catch (error) {
             console.error("[Matches] Failed to fetch:", error);
         }
+
+        // Fallback Mock Data for Testing if no real matches found
+        if (sorted.length === 0) {
+            sorted = [
+                { user_id: 'mock1', name: 'Alice', matching_score: 95 },
+                { user_id: 'mock2', name: 'Bob', matching_score: 88 },
+                { user_id: 'mock3', name: 'Charlie', matching_score: 75 },
+                { user_id: 'mock4', name: 'Diana', matching_score: 60 }
+            ];
+        }
+
+        setMatches(sorted.slice(0, 4));
     };
 
     const toggleConnection = async () => {
@@ -101,6 +112,7 @@ const Dashboard = () => {
                         <div
                             key={match.user_id}
                             className="match-orb"
+                            onClick={() => navigate(`/user/${match.user_id}`)}
                             style={{
                                 ...position,
                                 width: `${size}px`,

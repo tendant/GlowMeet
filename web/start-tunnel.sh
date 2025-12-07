@@ -1,0 +1,1 @@
+cloudflared tunnel run --name "glowmeet" --config-file "./cloudflared.yml"

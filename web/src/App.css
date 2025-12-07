@@ -67,7 +67,7 @@
   font-size: 1.25rem;
   color: var(--color-text-muted);
   max-width: 600px;
-  margin-bottom: 48px;
+  margin: 0 auto 48px auto;
 }
 
 .btn-large {
@@ -122,5 +122,14 @@
 @media (max-width: 768px) {
   .hero-title {
     font-size: 2.5rem;
+  }
+
+  .hero {
+    padding-top: 120px;
+  }
+
+  .feature-card {
+    text-align: center;
+    padding: 32px 20px;
   }
 }

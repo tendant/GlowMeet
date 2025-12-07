@@ -6,22 +6,33 @@ const AuthCallback = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        const code = searchParams.get('code');
-        const state = searchParams.get('state');
+        const exchangeToken = async () => {
+            const code = searchParams.get('code');
+            const state = searchParams.get('state');
 
-        if (code) {
-            // Here you would typically send the code to your backend
-            // await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/callback`, { method: 'POST', body: JSON.stringify({ code }) })
-            console.log("Received Auth Code:", code);
+            if (code && state) {
+                try {
+                    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/x/callback?code=${code}&state=${state}`);
+                    const data = await response.json();
 
-            // Simulate successful login
-            setTimeout(() => {
-                navigate('/dashboard'); // Navigate to main app area
-            }, 1500);
-        } else {
-            // Handle error or cancellation
-            navigate('/login');
-        }
+                    if (response.ok) {
+                        console.log("Login successful:", data);
+                        // Store tokens (in-memory or secure storage depending on requirements)
+                        // For now, we just redirect
+                        navigate('/dashboard');
+                    } else {
+                        console.error("Login failed:", data);
+                        navigate('/login');
+                    }
+                } catch (error) {
+                    console.error("Login error:", error);
+                    navigate('/login');
+                }
+            } else {
+                navigate('/login');
+            }
+        };
+        exchangeToken();
     }, [searchParams, navigate]);
 
     return (

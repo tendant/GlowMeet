@@ -1,0 +1,7 @@
+tunnel: glowmeet
+credentials-file: /home/tom-lei/.cloudflared/glowmeet.json
+
+ingress:
+  - hostname: glowmeet.tendant.dev
+    service: http://localhost:5173
+  - service: http_status:404

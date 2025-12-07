@@ -11,15 +11,22 @@ const XIcon = () => (
 const LoginPage = ({ mode = 'login' }) => {
     const navigate = useNavigate();
 
-    const handleXAuth = () => {
-        // In a real app, this would redirect to the backend auth endpoint
-        // or the configured X Auth URL.
-        // window.location.href = import.meta.env.VITE_API_BASE_URL + '/auth/twitter';
-        console.log("Initiating X Auth...");
+    const handleXAuth = async () => {
+        try {
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/x/login`);
+            const data = await response.json();
 
-        // For local demo purposes, let's simulate a redirect
-        // navigate('/auth/callback?code=mock_code');
-        alert("This would redirect to X (Twitter) for authentication.");
+            if (data.authorization_url) {
+                // Redirect the user to X.com
+                window.location.href = data.authorization_url;
+            } else {
+                console.error("No authorization URL received:", data);
+                alert("Failed to initiate X login.");
+            }
+        } catch (error) {
+            console.error("Error fetching auth URL:", error);
+            alert("Error connecting to backend server.");
+        }
     };
 
     return (

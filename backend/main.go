@@ -176,6 +176,7 @@ func (s *server) routes() http.Handler {
 		r.Post("/me/location", s.handleUpdateLocation)
 		r.Get("/users", s.handleUsers)
 		r.Get("/users/{id}", s.handleUser)
+		r.Post("/debug/flush", s.handleDebugFlush)
 	})
 
 	return r
@@ -624,6 +625,29 @@ func (s *memoryUserStore) getRawMap() map[string]userProfile {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.data
+}
+
+func (s *server) handleDebugFlush(w http.ResponseWriter, r *http.Request) {
+	var client *redis.Client
+
+	if rs, ok := s.users.(*redisUserStore); ok {
+		client = rs.client
+	} else if ts, ok := s.tokens.(*redisTokenStore); ok {
+		client = ts.client
+	}
+
+	if client == nil {
+		writeError(w, http.StatusBadRequest, "server not running in redis mode")
+		return
+	}
+
+	if err := client.FlushAll(r.Context()).Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to flush redis: %v", err))
+		return
+	}
+
+	log.Printf("redis flushed via debug endpoint")
+	writeJSON(w, http.StatusOK, map[string]string{"status": "flushed"})
 }
 
 type redisUserStore struct {

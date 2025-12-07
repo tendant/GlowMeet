@@ -109,6 +109,22 @@ const Dashboard = () => {
                     // Random animation delay for heartbeat
                     const animDelay = (hash % 20) * 0.1;
 
+                    // Calculate distance
+                    const calculateDistanceInFeet = (lat1, lon1, lat2, lon2) => {
+                        if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+                        const R = 20902231; // Radius of the earth in feet
+                        const dLat = (lat2 - lat1) * Math.PI / 180;
+                        const dLon = (lon2 - lon1) * Math.PI / 180;
+                        const a =
+                            0.5 - Math.cos(dLat) / 2 +
+                            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                            (1 - Math.cos(dLon)) / 2;
+
+                        return Math.round(R * 2 * Math.asin(Math.sqrt(a)));
+                    }
+
+                    const distance = calculateDistanceInFeet(user?.lat, user?.long, match.lat, match.long);
+
                     return (
                         <div
                             key={match.user_id}
@@ -128,7 +144,7 @@ const Dashboard = () => {
                                     0 0 60px ${color}aa,
                                     0 0 100px ${color}66
                                 `,
-                                animation: `orb-heartbeat 2s ease-in-out infinite`,
+                                animation: `orb-heartbeat 5s ease-in-out infinite`,
                                 animationDelay: `${animDelay}s`,
                                 zIndex: Math.round(scoreNormalized * 10)
                             }}
@@ -140,6 +156,11 @@ const Dashboard = () => {
                             <span className="orb-score">
                                 {Math.round(match.matching_score)}%
                             </span>
+                            {distance !== null && (
+                                <span className="orb-distance">
+                                    {distance.toLocaleString()} ft
+                                </span>
+                            )}
 
                         </div>
                     );

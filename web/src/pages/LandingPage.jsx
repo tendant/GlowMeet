@@ -9,8 +9,7 @@ const LandingPage = () => {
                 <div className="container header-content">
                     <div className="logo glow-text">GlowMeet</div>
                     <nav className="nav">
-                        <button className="btn-ghost" onClick={() => navigate('/login')}>Login</button>
-                        <button className="btn-primary" onClick={() => navigate('/signup')}>Sign Up with X</button>
+                        <button className="btn-primary" onClick={() => navigate('/login')}>Login</button>
                     </nav>
                 </div>
             </header>
@@ -27,7 +26,7 @@ const LandingPage = () => {
                             GlowMeet uses advanced AI and realtime geolocation to match you with people who share your passions, right where you are.
                         </p>
                         <div className="hero-actions">
-                            <button className="btn-primary btn-large" onClick={() => navigate('/signup')}>Start Matching</button>
+                            <button className="btn-primary btn-large" onClick={() => navigate('/login')}>Login</button>
                         </div>
                     </div>
                 </section>

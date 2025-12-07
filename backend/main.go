@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -26,6 +27,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/oauth2"
 )
 
@@ -39,6 +41,11 @@ type Config struct {
 	JWTSecret     string
 	JWTTTL        time.Duration
 	XAiAPIKey     string
+	Persistence   string
+	RedisAddr     string
+	RedisPassword string
+	RedisDB       int
+	RedisTLS      bool
 }
 
 type stateEntry struct {
@@ -57,7 +64,7 @@ type server struct {
 	oauth   *oauth2.Config
 	states  *stateStore
 	users   *userStore
-	tokens  *tokenStore
+	tokens  tokenStore
 	tweets  *tweetStore
 	matcher *matching.Service
 }
@@ -73,7 +80,7 @@ func main() {
 	srv := newServer(cfg)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
-	log.Printf("starting GlowMeet auth server on %s (redirect_url=%s, cors_origin=%s, frontend_url=%s)", addr, cfg.RedirectURL, cfg.AllowedOrigin, cfg.FrontendURL)
+	log.Printf("starting GlowMeet auth server on %s (redirect_url=%s, cors_origin=%s, frontend_url=%s, persistence=%s)", addr, cfg.RedirectURL, cfg.AllowedOrigin, cfg.FrontendURL, cfg.Persistence)
 	if err := http.ListenAndServe(addr, srv.routes()); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
@@ -90,6 +97,11 @@ func loadConfig() (*Config, error) {
 		JWTSecret:     os.Getenv("APP_JWT_SECRET"),
 		JWTTTL:        getEnvDuration("APP_JWT_TTL", 24*time.Hour),
 		XAiAPIKey:     os.Getenv("XAI_API_KEY"),
+		Persistence:   getEnv("PERSISTENCE", "memory"),
+		RedisAddr:     getEnv("REDIS_ADDR", ""),
+		RedisPassword: os.Getenv("REDIS_PASSWORD"),
+		RedisDB:       getEnvInt("REDIS_DB", 0),
+		RedisTLS:      getEnvBool("REDIS_TLS", false),
 	}
 
 	if cfg.ClientID == "" {
@@ -103,6 +115,9 @@ func loadConfig() (*Config, error) {
 	}
 	if cfg.JWTSecret == "" {
 		return nil, errors.New("missing APP_JWT_SECRET")
+	}
+	if cfg.Persistence != "memory" && cfg.Persistence != "redis" {
+		cfg.Persistence = "memory"
 	}
 
 	return cfg, nil
@@ -122,8 +137,8 @@ func newServer(cfg *Config) *server {
 			},
 		},
 		states:  newStateStore(10 * time.Minute),
-		users:   newUserStore(500),
-		tokens:  newTokenStore(500),
+		users:   newUserStore(50),
+		tokens:  newTokenStoreFromConfig(cfg),
 		tweets:  newTweetStore(50),
 		matcher: matching.NewService(cfg.XAiAPIKey),
 	}
@@ -240,14 +255,14 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 		go s.fetchUserTweets(profile.ID, token.AccessToken) // This will trigger XAI analysis -> then trigger matching
 	}
 
-	s.tokens.upsert(sessionID, tokenInfo{
+	s.tokens.upsert(profile.ID, tokenInfo{
 		UserID:       profile.ID,
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
 		Expiry:       token.Expiry,
 	})
 
-	sessionToken, err := s.issueJWT(sessionID, token.Expiry)
+	sessionToken, err := s.issueJWT(profile.ID, token.Expiry)
 	if err != nil {
 		logError(r, "failed creating session token", err)
 		writeError(w, http.StatusInternalServerError, "session creation failed")
@@ -279,21 +294,12 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
-	_, sessionID, userID := s.resolveAccessToken(r)
-	if sessionID == "" {
+	userID := s.resolveAccessToken(r)
+	if userID == "" {
 		writeError(w, http.StatusUnauthorized, "missing access token")
 		return
 	}
 
-	token, ok := s.tokens.get(sessionID)
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "session not found")
-		return
-	}
-
-	if userID == "" {
-		userID = token.UserID
-	}
 	if userID == "" {
 		writeError(w, http.StatusNotFound, "user not cached")
 		return
@@ -301,8 +307,21 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 
 	profile, ok := s.users.get(userID)
 	if !ok {
-		writeError(w, http.StatusNotFound, "user not cached")
-		return
+		// try to fetch using stored token
+		if tok, ok := s.tokens.get(userID); ok && tok.AccessToken != "" {
+			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+			defer cancel()
+			fresh, err := s.fetchXUser(ctx, tok.AccessToken)
+			if err == nil && fresh.ID != "" {
+				s.users.upsert(fresh)
+				profile = fresh
+				ok = true
+			}
+		}
+		if !ok {
+			writeError(w, http.StatusNotFound, "user not cached")
+			return
+		}
 	}
 
 	if profile.ID != "" {
@@ -474,8 +493,8 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
-	accessToken, sessionID, _ := s.resolveAccessToken(r)
-	if accessToken == "" {
+	userID := s.resolveAccessToken(r)
+	if userID == "" {
 		writeError(w, http.StatusUnauthorized, "missing access token")
 		return
 	}
@@ -496,18 +515,7 @@ func (s *server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, ok := s.tokens.get(sessionID)
-	if !ok || existing.AccessToken == "" {
-		writeError(w, http.StatusUnauthorized, "session not found")
-		return
-	}
-
-	if existing.UserID == "" {
-		writeError(w, http.StatusNotFound, "user not cached")
-		return
-	}
-
-	s.users.updateProfile(existing.UserID, func(u userProfile) userProfile {
+	s.users.updateProfile(userID, func(u userProfile) userProfile {
 		if body.Interests != "" {
 			u.Interests = body.Interests
 		}
@@ -516,11 +524,9 @@ func (s *server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 
 	// Trigger XAI analysis to update summary/score based on new interests
 	if body.Interests != "" {
-		tweets := s.tweets.get(existing.UserID)
-		// Even if no tweets, we might want to re-run if interests exist (though current logic requires tweets context-wise)
-		// Current callXAIAnalysis checks for len(tweets) > 0.
+		tweets := s.tweets.get(userID)
 		if len(tweets) > 0 {
-			go s.callXAIAnalysis(existing.UserID, tweets)
+			go s.callXAIAnalysis(userID, tweets)
 		}
 	}
 
@@ -530,8 +536,8 @@ func (s *server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleUpdateLocation(w http.ResponseWriter, r *http.Request) {
-	_, sessionID, _ := s.resolveAccessToken(r)
-	if sessionID == "" {
+	userID := s.resolveAccessToken(r)
+	if userID == "" {
 		writeError(w, http.StatusUnauthorized, "missing access token")
 		return
 	}
@@ -550,13 +556,7 @@ func (s *server) handleUpdateLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, ok := s.tokens.get(sessionID)
-	if !ok || existing.AccessToken == "" || existing.UserID == "" {
-		writeError(w, http.StatusUnauthorized, "session not found")
-		return
-	}
-
-	s.users.updateLocation(existing.UserID, body.Lat, body.Long)
+	s.users.updateLocation(userID, body.Lat, body.Long)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"lat":  body.Lat,
 		"long": body.Long,
@@ -639,16 +639,26 @@ type userStore struct {
 }
 
 type tokenInfo struct {
-	UserID       string
-	AccessToken  string
-	RefreshToken string
-	Expiry       time.Time
+	UserID       string    `json:"user_id"`
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	Expiry       time.Time `json:"expiry"`
 }
 
-type tokenStore struct {
+type tokenStore interface {
+	upsert(userID string, token tokenInfo)
+	get(userID string) (tokenInfo, bool)
+}
+
+type memoryTokenStore struct {
 	mu   sync.Mutex
 	lim  int
 	data map[string]tokenInfo
+}
+
+type redisTokenStore struct {
+	client      *redis.Client
+	ttlFallback time.Duration
 }
 
 type tweetStore struct {
@@ -665,11 +675,38 @@ func newUserStore(limit int) *userStore {
 	}
 }
 
-func newTokenStore(limit int) *tokenStore {
-	return &tokenStore{
+func newMemoryTokenStore(limit int) *memoryTokenStore {
+	return &memoryTokenStore{
 		lim:  limit,
 		data: make(map[string]tokenInfo),
 	}
+}
+
+func newTokenStoreFromConfig(cfg *Config) tokenStore {
+	if cfg.Persistence == "redis" && cfg.RedisAddr != "" {
+		opts := &redis.Options{
+			Addr:     cfg.RedisAddr,
+			Password: cfg.RedisPassword,
+			DB:       cfg.RedisDB,
+			TLSConfig: func() *tls.Config {
+				if cfg.RedisTLS {
+					return &tls.Config{InsecureSkipVerify: false} // use defaults
+				}
+				return nil
+			}(),
+		}
+		client := redis.NewClient(opts)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := client.Ping(ctx).Err(); err != nil {
+			log.Printf("redis ping failed, falling back to memory: %v", err)
+		} else {
+			log.Printf("using redis persistence at %s db=%d tls=%t", cfg.RedisAddr, cfg.RedisDB, cfg.RedisTLS)
+			return &redisTokenStore{client: client, ttlFallback: cfg.JWTTTL}
+		}
+	}
+
+	return newMemoryTokenStore(200)
 }
 
 func newTweetStore(limit int) *tweetStore {
@@ -805,13 +842,13 @@ func defaultScore(id string) float64 {
 	return float64(val%1000) / 10 // 0.0 - 99.9
 }
 
-func (s *tokenStore) upsert(sessionID string, token tokenInfo) {
-	if sessionID == "" {
+func (s *memoryTokenStore) upsert(userID string, token tokenInfo) {
+	if userID == "" {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.data[sessionID] = token
+	s.data[userID] = token
 	if len(s.data) > s.lim {
 		for k := range s.data {
 			delete(s.data, k)
@@ -822,11 +859,55 @@ func (s *tokenStore) upsert(sessionID string, token tokenInfo) {
 	}
 }
 
-func (s *tokenStore) get(sessionID string) (tokenInfo, bool) {
+func (s *memoryTokenStore) get(userID string) (tokenInfo, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	token, ok := s.data[sessionID]
+	token, ok := s.data[userID]
 	return token, ok
+}
+
+func (s *redisTokenStore) upsert(userID string, token tokenInfo) {
+	if userID == "" || s == nil || s.client == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ttl := time.Until(token.Expiry)
+	if ttl <= 0 {
+		ttl = s.ttlFallback
+	}
+	if ttl <= 0 {
+		ttl = 24 * time.Hour
+	}
+	payload, err := json.Marshal(token)
+	if err != nil {
+		log.Printf("redis token marshal err: %v", err)
+		return
+	}
+	if err := s.client.Set(ctx, redisTokenKey(userID), payload, ttl).Err(); err != nil {
+		log.Printf("redis token set err: %v", err)
+	}
+}
+
+func (s *redisTokenStore) get(userID string) (tokenInfo, bool) {
+	if userID == "" || s == nil || s.client == nil {
+		return tokenInfo{}, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	raw, err := s.client.Get(ctx, redisTokenKey(userID)).Bytes()
+	if err != nil {
+		if err != redis.Nil {
+			log.Printf("redis token get err: %v", err)
+		}
+		return tokenInfo{}, false
+	}
+	var tok tokenInfo
+	if err := json.Unmarshal(raw, &tok); err != nil {
+		log.Printf("redis token unmarshal err: %v", err)
+		return tokenInfo{}, false
+	}
+	return tok, true
 }
 
 func (s *tweetStore) set(userID string, tweets []string) {
@@ -1104,6 +1185,27 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+func getEnvInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			return i
+		}
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if v == "1" || strings.ToLower(v) == "true" || strings.ToLower(v) == "yes" {
+			return true
+		}
+		if v == "0" || strings.ToLower(v) == "false" || strings.ToLower(v) == "no" {
+			return false
+		}
+	}
+	return fallback
+}
+
 func logError(r *http.Request, msg string, err error) {
 	requestID := middleware.GetReqID(r.Context())
 	prefix := fmt.Sprintf("req_id=%s %s %s host=%s", requestID, r.Method, r.URL.Path, r.Host)
@@ -1161,41 +1263,34 @@ func min(a, b int) int {
 	return b
 }
 
+func redisTokenKey(userID string) string {
+	return "token:" + userID
+}
+
 func (s *server) seedUsers() {
 	if err := s.users.loadFromFile("data/users.json"); err != nil {
 		log.Printf("warning: could not load fake users from data/users.json: %v", err)
 	}
 }
 
-func (s *server) resolveAccessToken(r *http.Request) (string, string, string) {
+func (s *server) resolveAccessToken(r *http.Request) string {
 	sessionCookie, err := r.Cookie("access_token")
 	if err != nil || sessionCookie.Value == "" {
-		return "", "", ""
+		return ""
 	}
 
 	claims, err := s.parseJWT(sessionCookie.Value)
 	if err != nil {
 		logError(r, "invalid session token", err)
-		return "", "", ""
+		return ""
 	}
 
-	sessionID := claims.Subject
-	if sessionID == "" {
-		return "", "", ""
-	}
-
-	if token, ok := s.tokens.get(sessionID); ok && token.AccessToken != "" {
-		if token.Expiry.IsZero() || token.Expiry.After(time.Now()) {
-			return token.AccessToken, sessionID, token.UserID
-		}
-	}
-
-	return "", sessionID, ""
+	return claims.Subject
 }
 
-func (s *server) issueJWT(sessionID string, fallbackExpiry time.Time) (string, error) {
-	if sessionID == "" {
-		return "", errors.New("missing session id for jwt")
+func (s *server) issueJWT(userID string, fallbackExpiry time.Time) (string, error) {
+	if userID == "" {
+		return "", errors.New("missing user id for jwt")
 	}
 
 	exp := time.Now().Add(s.config.JWTTTL)
@@ -1204,7 +1299,7 @@ func (s *server) issueJWT(sessionID string, fallbackExpiry time.Time) (string, e
 	}
 
 	claims := jwt.RegisteredClaims{
-		Subject:   sessionID,
+		Subject:   userID,
 		ExpiresAt: jwt.NewNumericDate(exp),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 	}

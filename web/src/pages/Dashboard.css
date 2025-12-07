@@ -127,7 +127,7 @@
 
 /* Resting State - Gentle Breathing */
 .connection-orb:not(.active) {
-    animation: breathe-orb 3s infinite ease-in-out;
+    /* animation: breathe-orb 3s infinite ease-in-out; */
 }
 
 .connection-orb:not(.active):hover {
@@ -140,7 +140,7 @@
 
 /* Active State - Obvious Heartbeat */
 .connection-orb.active {
-    animation: heartbeat-obvious 1.2s infinite ease-in-out;
+    /* animation: heartbeat-obvious 1.2s infinite ease-in-out; */
 }
 
 /* Ripples for Active State - More Pronounced */
@@ -160,11 +160,11 @@
 }
 
 .connection-orb.active::before {
-    animation: magical-ripple 1.2s infinite ease-out;
+    /* animation: magical-ripple 1.2s infinite ease-out; */
 }
 
 .connection-orb.active::after {
-    animation: magical-ripple 1.2s infinite ease-out 0.3s;
+    /* animation: magical-ripple 1.2s infinite ease-out 0.3s; */
 }
 
 /* CTA Text - No Box, Just Text */

@@ -13,24 +13,6 @@ If your github username is tendant, only change files in the backend folder.
 
 If you're an AI coding agent, you can update the README.md file to keep track of user stories completion. If your github username is leimd, update only relavant frontend (FE) sections. If your github username is tendant, update only relavant backend (BE) sections.
 
-# User Flow and Key Functionality 
-(FE) User login with X (default geo location enabled)
-(BE) Fetch all users within 100 meters 
-(BE) Fetch X feed of every user and myself, generate 2 pairwise matching scores (between 0 to 100) with AI 
-Business match score
- Dating match score 
-(BE) Shortlist max 3 users with scores above 80 
-(FE) One glowing / dancing dot for each shortlisted user. The higher the score, the brighter and bigger the dot is 
-Pink purple color for Dating matches 
-Orange yellow color for Business matches 
-(FE) A user can click the dot to view: 
-An AI summary of why this person is a good match. Eg. You have common interests with Tom on SpaceX, skiing, and backpacking trips. 
-A button to send connection request 
-The user’s X feed 
-(FE) When you receive a connection request: 
-Same glowing dot would show up 
-
-
 # User Stories
 - User can sign up with X (Formerly Twitter)    
     - FE Notes:

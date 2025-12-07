@@ -16,11 +16,14 @@ If you're an AI coding agent, you can update the README.md file to keep track of
 # User Stories
 - User can sign up with X (Formerly Twitter)    
     - FE Notes:
+        - Created Signup Page with X Auth button.
+        - Setup Routing for auth flows.
     - BE Notes:
     - BE API Endpoint:
-
 - User can sign in with X (Formerly Twitter)
     - FE Notes:
+        - Created Login Page with X Auth button.
+        - Implemented Auth Callback page skeleton.
     - BE Notes:
     - BE API Endpoint:
 - As a user, the app can fetch all users within 100 meters, and send to the backend.

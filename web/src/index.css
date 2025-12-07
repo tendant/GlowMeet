@@ -1,27 +1,33 @@
 :root {
   /* Color Palette - HSL */
-  --color-bg-base: 240, 10%, 10%; /* Dark background */
-  --color-bg-surface: 240, 10%, 15%; /* Slightly lighter surface */
+  --color-bg-base: 240, 10%, 10%;
+  /* Dark background */
+  --color-bg-surface: 240, 10%, 15%;
+  /* Slightly lighter surface */
   --color-bg-surface-hover: 240, 10%, 20%;
-  
-  --color-primary: 260, 100%, 65%; /* Vibrant Purple/Glow */
+
+  --color-primary: 260, 100%, 65%;
+  /* Vibrant Purple/Glow */
   --color-primary-hover: 260, 100%, 75%;
-  --color-secondary: 180, 100%, 50%; /* Cyan accent */
-  
+  --color-secondary: 180, 100%, 50%;
+  /* Cyan accent */
+
   --color-text-main: 0, 0%, 100%;
   --color-text-muted: 240, 10%, 70%;
-  
+
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 20px;
-  
+
   --font-sans: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  
+
   --container-max-width: 1200px;
   --header-height: 70px;
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -86,4 +92,12 @@ button {
   border: 1px solid hsla(255, 100%, 100%, 0.1);
   border-radius: var(--radius-lg);
   padding: 24px;
+}
+
+.center-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100vh;
 }

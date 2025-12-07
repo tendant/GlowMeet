@@ -1,53 +1,23 @@
-import { useState } from 'react'
-import './App.css'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/LoginPage';
+import AuthCallback from './pages/AuthCallback';
+import './App.css';
 
 function App() {
   return (
-    <div className="app">
-      <header className="header">
-        <div className="container header-content">
-          <div className="logo glow-text">GlowMeet</div>
-          <nav className="nav">
-            <button className="btn-ghost">Login</button>
-            <button className="btn-primary">Sign Up with X</button>
-          </nav>
-        </div>
-      </header>
-
-      <main>
-        <section className="hero">
-          <div className="glow-orb"></div>
-          <div className="container hero-content">
-            <h1 className="hero-title">
-              Connect with <span className="glow-text">Soulmates</span> <br />
-              Nearby via AI
-            </h1>
-            <p className="hero-description">
-              GlowMeet uses advanced AI and realtime geolocation to match you with people who share your passions, right where you are.
-            </p>
-            <div className="hero-actions">
-              <button className="btn-primary btn-large">Start Matching</button>
-            </div>
-          </div>
-        </section>
-
-        <section className="features container">
-          <div className="glass-card feature-card">
-            <h3>📍 Real-time Geolocation</h3>
-            <p>Find matches within 100 meters of your current location instantly. Connect in the real world.</p>
-          </div>
-          <div className="glass-card feature-card">
-            <h3>🧠 AI Powered Matching</h3>
-            <p>Our smart algorithms analyze specific interests to ensure meaningful connections beyond surface level.</p>
-          </div>
-          <div className="glass-card feature-card">
-            <h3>🔒 Safe & Private</h3>
-            <p>Your location is blurred and only shared when you explicitly choose to connect.</p>
-          </div>
-        </section>
-      </main>
-    </div>
-  )
+    <Router>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginPage mode="login" />} />
+        <Route path="/signup" element={<LoginPage mode="signup" />} />
+        <Route path="/auth/callback/twitter" element={<AuthCallback />} />
+        {/* Placeholder for dashboard */}
+        <Route path="/dashboard" element={<div className="app center-content"><h1 className="glow-text">Welcome to GlowMeet</h1></div>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Router>
+  );
 }
 
-export default App
+export default App;

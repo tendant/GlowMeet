@@ -5,6 +5,43 @@
     min-height: 100vh;
     position: relative;
     overflow: hidden;
+    background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
+    color: white;
+}
+
+/* Stars Background Effect */
+.dashboard-container::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image:
+        radial-gradient(2px 2px at 20px 30px, #eee, rgba(0, 0, 0, 0)),
+        radial-gradient(2px 2px at 40px 70px, #fff, rgba(0, 0, 0, 0)),
+        radial-gradient(2px 2px at 50px 160px, #ddd, rgba(0, 0, 0, 0)),
+        radial-gradient(2px 2px at 90px 40px, #fff, rgba(0, 0, 0, 0)),
+        radial-gradient(2px 2px at 130px 80px, #fff, rgba(0, 0, 0, 0));
+    background-repeat: repeat;
+    background-size: 200px 200px;
+    opacity: 0.3;
+    animation: stars-twinkle 4s infinite ease-in-out;
+    z-index: 0;
+}
+
+@keyframes stars-twinkle {
+
+    0%,
+    100% {
+        opacity: 0.3;
+        transform: translateY(0);
+    }
+
+    50% {
+        opacity: 0.5;
+        transform: translateY(-2px);
+    }
 }
 
 /* Main Content Area - Full Screen Centered */
@@ -37,6 +74,8 @@
     margin: 0;
 }
 
+
+
 /* User Display Section */
 .user-display {
     display: flex;
@@ -46,21 +85,22 @@
 }
 
 .large-username {
-    font-family: 'Brush Script MT', 'Bradley Hand', cursive, sans-serif;
+    font-family: var(--font-sans);
     font-size: 4rem;
-    font-weight: 400;
-    color: #FF8C00;
+    font-weight: 800;
+    color: white;
+    text-shadow: 0 0 20px rgba(255, 165, 0, 0.3);
     margin: 0;
-    text-align: center;
-    letter-spacing: 2px;
-    text-shadow: 0 0 20px rgba(255, 140, 0, 0.5);
+    line-height: 1.1;
+    letter-spacing: -1px;
 }
 
 .connection-status {
     font-size: 1.1rem;
-    color: #6B7280;
+    color: #9CA3AF;
     margin: 0;
-    font-weight: 400;
+    font-weight: 600;
+    font-family: var(--font-sans);
     letter-spacing: 0.5px;
 }
 
@@ -240,11 +280,14 @@
 }
 
 .orb-username {
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     font-weight: 700;
     text-align: center;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    max-width: 80%;
+    color: rgba(255, 255, 255, 0.95);
+    text-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.5),
+        0 2px 8px rgba(0, 0, 0, 0.3);
+    max-width: 85%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

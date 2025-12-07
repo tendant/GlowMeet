@@ -118,11 +118,14 @@ const Dashboard = () => {
                                 width: `${size}px`,
                                 height: `${size}px`,
                                 opacity: brightness,
-                                background: `radial-gradient(circle at 50% 50%, ${color}, ${color}dd)`,
+                                // Ethereal Memory Orb Style
+                                background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9) 0%, ${color} 25%, ${color}ee 60%, ${color}99 100%)`,
                                 boxShadow: `
-                                    0 0 ${30 * brightness}px ${color}aa,
-                                    0 0 ${60 * brightness}px ${color}77,
-                                    0 0 ${90 * brightness}px ${color}44
+                                    0 0 20px ${color},
+                                    0 0 60px ${color}aa,
+                                    0 0 100px ${color}66,
+                                    inset 10px 10px 20px rgba(255,255,255,0.5),
+                                    inset -10px -10px 20px rgba(0,0,0,0.1)
                                 `,
                                 animationDelay,
                                 animationDuration

@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +28,7 @@ type Config struct {
 	ClientSecret  string
 	RedirectURL   string
 	AllowedOrigin string
+	FrontendURL   string
 }
 
 type stateEntry struct {
@@ -57,7 +59,7 @@ func main() {
 	srv := newServer(cfg)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
-	log.Printf("starting GlowMeet auth server on %s (redirect_url=%s, cors_origin=%s)", addr, cfg.RedirectURL, cfg.AllowedOrigin)
+	log.Printf("starting GlowMeet auth server on %s (redirect_url=%s, cors_origin=%s, frontend_url=%s)", addr, cfg.RedirectURL, cfg.AllowedOrigin, cfg.FrontendURL)
 	if err := http.ListenAndServe(addr, srv.routes()); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
@@ -70,6 +72,7 @@ func loadConfig() (*Config, error) {
 		ClientSecret:  os.Getenv("X_CLIENT_SECRET"),
 		RedirectURL:   os.Getenv("X_REDIRECT_URL"),
 		AllowedOrigin: getEnv("CORS_ORIGIN", "*"),
+		FrontendURL:   getEnv("FRONTEND_URL", "http://localhost:3000"),
 	}
 
 	if cfg.ClientID == "" {
@@ -186,12 +189,29 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"access_token":  token.AccessToken,
-		"refresh_token": token.RefreshToken,
-		"token_type":    token.TokenType,
-		"expires_at":    token.Expiry,
+	secureCookie := strings.HasPrefix(strings.ToLower(s.config.RedirectURL), "https")
+	http.SetCookie(w, &http.Cookie{
+		Name:     "gm_access_token",
+		Value:    token.AccessToken,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secureCookie,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  token.Expiry,
 	})
+
+	if token.RefreshToken != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "gm_refresh_token",
+			Value:    token.RefreshToken,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   secureCookie,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+
+	http.Redirect(w, r, s.config.FrontendURL, http.StatusFound)
 }
 
 func newStateStore(ttl time.Duration) *stateStore {

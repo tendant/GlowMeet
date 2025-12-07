@@ -1,7 +1,11 @@
-import { useNavigate } from 'react-router-dom'
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { isAuthenticated } from '../utils/auth';
 
 const LandingPage = () => {
     const navigate = useNavigate();
+
+
 
     return (
         <>

@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+
 
 const XIcon = () => (
     <svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20" fill="currentColor" style={{ marginRight: '10px' }}>
@@ -10,6 +12,8 @@ const XIcon = () => (
 
 const LoginPage = ({ mode = 'login' }) => {
     const navigate = useNavigate();
+
+
     const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
     const handleXAuth = async () => {

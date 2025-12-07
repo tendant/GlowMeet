@@ -55,7 +55,8 @@ const APIExplorer = () => {
             <div className="presets" style={{ marginBottom: '20px' }}>
                 <h3>Presets:</h3>
                 <button onClick={() => loadPreset('GET', '/api/me')}>GET /api/me</button>
-                <button onClick={() => loadPreset('POST', '/api/me', { lat: 37.7749, long: -122.4194 })}>POST /api/me</button>
+                <button onClick={() => loadPreset('POST', '/api/me', { interests: 'coding, hiking' })}>POST /api/me (Interests)</button>
+                <button onClick={() => loadPreset('POST', '/api/me/location', { lat: 37.7749, long: -122.4194 })}>POST /api/me/location</button>
                 <button onClick={() => loadPreset('GET', '/api/users')}>GET /api/users</button>
             </div>
 

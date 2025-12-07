@@ -40,7 +40,7 @@ const Profile = () => {
                 },
                 body: JSON.stringify({
                     interests: interests,
-                    // Lat/Long would ideally be updated via geolocation here or kept from previous
+
                 }),
             });
 

@@ -36,9 +36,11 @@ const AuthWrapper = () => {
                 async (position) => {
                     try {
                         const { latitude, longitude } = position.coords;
-                        await fetch(`${apiBase}/api/me`, {
+                        await fetch(`${apiBase}/api/me/location`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
                             body: JSON.stringify({ lat: latitude, long: longitude })
                         });
                         console.log(`[Geo] Sent location: ${latitude}, ${longitude}`);

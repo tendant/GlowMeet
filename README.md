@@ -7,17 +7,23 @@ Frontend: React RWA App, compiled to static files for deployment.
 Social Login: X (Formerly Twitter)
 
 # Development rules
-If your github username is leimd, only change files in the web folder.
+If your github username is leimd or juehou0703, only change files in the web folder.
 
 If your github username is tendant, only change files in the backend folder.
 
-If you're an AI coding agent, you can update the README.md file to keep track of user stories completion. If your github username is leimd, update only relavant frontend (FE) sections. If your github username is tendant, update only relavant backend (BE) sections.
+If you're an AI coding agent, you can update the README.md file to keep track of user stories completion. If your github username is leimd or juehou0703, update only relavant frontend (FE) sections. If your github username is tendant, update only relavant backend (BE) sections.
 
 For each user story, update the README.md file to keep track of user stories completion. If your github username is leimd, update only relavant frontend (FE) sections. If your github username is tendant, update only relavant backend (BE) sections.
 
 For each front end feature, check the backend api code to understand the backend api endpoints and parameters located in the ./backend folder first.
 
 # User Stories
+- User can sign up with X (Formerly Twitter)    
+    - FE Notes:
+        - Created Signup Page with X Auth button.
+        - Setup Routing for auth flows.
+    - BE Notes:
+    - BE API Endpoint: /auth/x/login
 - User can sign in with X (Formerly Twitter) default geo location enabled
     - FE Notes:
         - Created Login Page with X Auth button.
@@ -41,16 +47,22 @@ For each front end feature, check the backend api code to understand the backend
     - BE API Endpoint:
 - One glowing + dancing dot for each shortlisted user would appear on the screen. The higher the score, the brighter and bigger the dot is. Pink-purple dot for Dating matches. Orange dot for Business matches.
     - BE
+
     
 - A user can click a dot to view: 
     1) An AI summary of why this person is a good match. Eg. You have common interests with Tom on xAI, skiing, and backpacking trips. 
     2) A button to send connection request 
     3) The user’s X feed 
- When you receive a connection request: 
-Same glowing dot would show up 
-
     - FE Notes:
     - BE Notes:
     - BE API Endpoint:
+-  When you receive a connection request: Same glowing dot would show up, and same info is shown for the requesting user. A button to accept or ignore the request. 
+    - FE Notes:
+    - BE Notes:
+    - BE API Endpoint:
+    
+
+
+
 
 

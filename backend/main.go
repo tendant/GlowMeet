@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -293,7 +294,32 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 	users := s.users.top(20)
-	writeJSON(w, http.StatusOK, users)
+	type userSummary struct {
+		UserID        string  `json:"user_id"`
+		Name          string  `json:"name,omitempty"`
+		Username      string  `json:"username,omitempty"`
+		ProfileImage  string  `json:"profile_image_url,omitempty"`
+		Lat           float64 `json:"lat,omitempty"`
+		Long          float64 `json:"long,omitempty"`
+		MatchingScore float64 `json:"matching_score,omitempty"`
+		Description   string  `json:"description,omitempty"`
+	}
+
+	out := make([]userSummary, 0, len(users))
+	for _, u := range users {
+		out = append(out, userSummary{
+			UserID:        u.ID,
+			Name:          u.Name,
+			Username:      u.Username,
+			ProfileImage:  u.ProfileImageURL,
+			Lat:           u.Lat,
+			Long:          u.Long,
+			MatchingScore: u.MatchingScore,
+			Description:   u.Description,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
@@ -396,6 +422,8 @@ type userProfile struct {
 	ProfileImageURL string  `json:"profile_image_url,omitempty"`
 	Lat             float64 `json:"lat,omitempty"`
 	Long            float64 `json:"long,omitempty"`
+	MatchingScore   float64 `json:"matching_score,omitempty"`
+	Description     string  `json:"description,omitempty"`
 }
 
 type userStore struct {
@@ -434,6 +462,12 @@ func newTokenStore(limit int) *tokenStore {
 func (s *userStore) upsert(u userProfile) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if u.MatchingScore == 0 {
+		u.MatchingScore = defaultScore(u.ID)
+	}
+	if u.Description == "" && u.Username != "" {
+		u.Description = fmt.Sprintf("X user @%s", u.Username)
+	}
 	s.data[u.ID] = u
 	if len(s.data) > s.lim {
 		// trim oldest by deleting arbitrary entries when limit exceeded
@@ -474,6 +508,15 @@ func (s *userStore) get(userID string) (userProfile, bool) {
 	defer s.mu.Unlock()
 	user, ok := s.data[userID]
 	return user, ok
+}
+
+func defaultScore(id string) float64 {
+	if id == "" {
+		return 0
+	}
+	sum := sha256.Sum256([]byte(id))
+	val := binary.BigEndian.Uint16(sum[:2])
+	return float64(val%1000) / 10 // 0.0 - 99.9
 }
 
 func (s *tokenStore) upsert(sessionID string, token tokenInfo) {

@@ -1,0 +1,87 @@
+.login-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.login-header {
+    position: absolute;
+    width: 100%;
+}
+
+.login-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.login-card {
+    max-width: 400px;
+    width: 100%;
+    text-align: center;
+    margin-top: 70px;
+    /* Offset for header */
+}
+
+.login-title {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    font-weight: 700;
+}
+
+.login-description {
+    color: var(--color-text-muted);
+    margin-bottom: 2rem;
+    font-size: 1rem;
+}
+
+.x-auth-button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #000000;
+    /* X brand color */
+    color: #ffffff;
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    transition: background-color 0.2s, transform 0.1s;
+    border: 1px solid #333;
+}
+
+.x-auth-button:hover {
+    background-color: #1a1a1a;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.x-auth-button:active {
+    transform: scale(0.98);
+}
+
+.login-footer {
+    margin-top: 1.5rem;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+}
+
+.link-text {
+    color: hsl(var(--color-primary));
+    cursor: pointer;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.link-text:hover {
+    color: hsl(var(--color-primary-hover));
+    text-decoration: underline;
+}
+
+.login-orb {
+    width: 600px;
+    height: 600px;
+    top: 50%;
+}

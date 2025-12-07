@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import './LoginPage.css';
 
 const XIcon = () => (
     <svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20" fill="currentColor" style={{ marginRight: '10px' }}>
@@ -12,8 +13,6 @@ const XIcon = () => (
 
 const LoginPage = ({ mode = 'login' }) => {
     const navigate = useNavigate();
-
-
     const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
     const handleXAuth = async () => {
@@ -35,51 +34,42 @@ const LoginPage = ({ mode = 'login' }) => {
     };
 
     return (
-        <div className="app" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-            <header className="header" style={{ position: 'absolute' }}>
+        <div className="app login-container">
+            <header className="header login-header">
                 <div className="container header-content">
                     <div className="logo glow-text" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>GlowMeet</div>
                 </div>
             </header>
 
-            <div className="container" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div className="glass-card" style={{ maxWidth: '400px', width: '100%', textAlign: 'center', marginTop: '70px' }}>
-                    <h2 style={{ fontSize: '2rem', marginBottom: '1rem' }}>
+            <div className="login-content">
+                <div className="glass-card login-card">
+                    <h2 className="login-title">
                         {mode === 'signup' ? 'Join GlowMeet' : 'Welcome Back'}
                     </h2>
-                    <p style={{ color: 'var(--color-text-muted)', marginBottom: '2rem' }}>
+                    <p className="login-description">
                         {mode === 'signup'
                             ? 'Connect with people nearby who share your vibe.'
                             : 'Sign in to continue your journey.'}
                     </p>
 
                     <button
-                        className="btn-primary"
+                        className="x-auth-button"
                         onClick={handleXAuth}
-                        style={{
-                            width: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: 'white',
-                            color: 'black',
-                            background: 'white' // Override gradient for X branding
-                        }}
                     >
                         <XIcon />
                         Sign {mode === 'signup' ? 'up' : 'in'} with X
                     </button>
 
-                    <div style={{ marginTop: '1.5rem', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                    <div className="login-footer">
                         {mode === 'signup' ? (
-                            <>Already have an account? <span onClick={() => navigate('/login')} style={{ color: 'hsl(var(--color-primary))', cursor: 'pointer' }}>Log in</span></>
+                            <>Already have an account? <span onClick={() => navigate('/login')} className="link-text">Log in</span></>
                         ) : (
-                            <>Don't have an account? <span onClick={() => navigate('/signup')} style={{ color: 'hsl(var(--color-primary))', cursor: 'pointer' }}>Sign up</span></>
+                            <>Don't have an account? <span onClick={() => navigate('/signup')} className="link-text">Sign up</span></>
                         )}
                     </div>
                 </div>
             </div>
-            <div className="glow-orb" style={{ width: '600px', height: '600px', top: '50%' }}></div>
+            <div className="glow-orb login-orb"></div>
         </div>
     );
 };

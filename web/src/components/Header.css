@@ -1,0 +1,41 @@
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 40px;
+    width: 100%;
+    z-index: 100;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+}
+
+.header-left .logo {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    flex-shrink: 0;
+}
+
+.header-left .user-greeting {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text-main);
+    background: hsla(240, 10%, 100%, 0.1);
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid hsla(255, 100%, 100%, 0.1);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.header-nav {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}

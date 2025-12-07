@@ -1,86 +1,207 @@
-/* Joy Card Container */
-.joy-card {
+/* Full Screen Layout */
+.dashboard-container {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 400px;
-    width: 300px;
-    margin: 0 auto;
-    /* Glassmorphism inheritance + specific layout */
-    background: hsla(var(--color-bg-surface), 0.6);
-    backdrop-filter: blur(12px);
-    border: 1px solid hsla(255, 100%, 100%, 0.1);
-    border-radius: var(--radius-lg);
+    min-height: 100vh;
     position: relative;
     overflow: hidden;
 }
 
-.joy-title {
-    font-family: 'Inter', sans-serif; /* Or a handwritten font if added later */
-    font-size: 2.5rem;
-    font-weight: 700;
-    margin-bottom: 3rem;
-    /* Inherit main text color or specific styling */
-    color: hsl(var(--color-text-main));
+/* Main Content Area - Full Screen Centered */
+.dashboard-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 10;
+    gap: 60px;
 }
 
-/* The Connection Circle */
-.connection-circle {
-    width: 150px;
-    height: 150px;
+/* User Display Section */
+.user-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+.large-username {
+    font-family: 'Brush Script MT', 'Bradley Hand', cursive, sans-serif;
+    font-size: 4rem;
+    font-weight: 400;
+    color: #FF8C00;
+    margin: 0;
+    text-align: center;
+    letter-spacing: 2px;
+    text-shadow: 0 0 20px rgba(255, 140, 0, 0.5);
+}
+
+.connection-status {
+    font-size: 1.1rem;
+    color: #6B7280;
+    margin: 0;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+}
+
+/* The Glowing Orb - Flat, Magical, Glowing */
+.connection-orb {
+    width: 220px;
+    height: 220px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.5s ease-in-out;
-    border: 4px dashed;
-    text-align: center;
-    padding: 1rem;
     position: relative;
-    background: transparent;
+    transition: all 0.4s ease;
+    background: radial-gradient(circle at 50% 50%,
+            #FFB366 0%,
+            #FF8C00 40%,
+            #E67300 100%);
+    box-shadow:
+        0 0 60px rgba(255, 140, 0, 0.8),
+        0 0 120px rgba(255, 140, 0, 0.6),
+        0 0 180px rgba(255, 140, 0, 0.3);
 }
 
-/* Default / Dimmed State */
-.connection-circle:not(.active) {
-    border-color: hsla(var(--color-text-muted), 0.3);
-    color: hsla(var(--color-text-muted), 0.7);
-    box-shadow: none;
+/* Resting State - Gentle Breathing */
+.connection-orb:not(.active) {
+    animation: breathe-orb 3s infinite ease-in-out;
 }
 
-/* Hover Effect for Dimmed State */
-.connection-circle:not(.active):hover {
-    border-color: hsla(var(--color-text-muted), 0.6);
-    color: hsl(var(--color-text-main));
-    transform: scale(1.02);
+.connection-orb:not(.active):hover {
+    transform: scale(1.05);
+    box-shadow:
+        0 0 80px rgba(255, 140, 0, 0.9),
+        0 0 160px rgba(255, 140, 0, 0.7),
+        0 0 200px rgba(255, 140, 0, 0.4);
 }
 
-/* Active / Lit Up State */
-.connection-circle.active {
-    border-color: hsl(var(--color-primary));
-    color: hsl(var(--color-primary)); /* Or bright orange as per mockup 'Open to connect' color? Prompt said "light up" */
-    box-shadow: 0 0 20px hsla(var(--color-primary), 0.4), inset 0 0 10px hsla(var(--color-primary), 0.2);
-    /* Make the border solid or keep dashed? Mockup shows dashed. Keeping dashed but glowing. */
-    border-style: dashed;
-    animation: pulse-glow 2s infinite;
+/* Active State - Obvious Heartbeat */
+.connection-orb.active {
+    animation: heartbeat-obvious 1.2s infinite ease-in-out;
 }
 
-.circle-text {
-    font-weight: 600;
-    font-size: 1.1rem;
-    pointer-events: none; /* Let clicks pass to parent */
-    user-select: none;
+/* Ripples for Active State - More Pronounced */
+.connection-orb.active::before,
+.connection-orb.active::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, rgba(255, 140, 0, 0.6), transparent 70%);
+    opacity: 0;
+    z-index: -1;
 }
 
-@keyframes pulse-glow {
-    0% {
-        box-shadow: 0 0 20px hsla(var(--color-primary), 0.4), inset 0 0 10px hsla(var(--color-primary), 0.2);
-    }
-    50% {
-        box-shadow: 0 0 35px hsla(var(--color-primary), 0.6), inset 0 0 15px hsla(var(--color-primary), 0.3);
-    }
+.connection-orb.active::before {
+    animation: magical-ripple 1.2s infinite ease-out;
+}
+
+.connection-orb.active::after {
+    animation: magical-ripple 1.2s infinite ease-out 0.3s;
+}
+
+/* CTA Text - No Box, Just Text */
+.orb-cta {
+    font-size: 1.2rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    text-align: center;
+    color: rgba(255, 255, 255, 1);
+    text-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.8),
+        0 0 20px rgba(255, 140, 0, 1);
+    transition: all 0.3s ease;
+}
+
+.connection-orb:hover .orb-cta {
+    transform: scale(1.08);
+    text-shadow:
+        0 2px 10px rgba(0, 0, 0, 0.9),
+        0 0 30px rgba(255, 140, 0, 1);
+}
+
+/* Keyframes */
+@keyframes breathe-orb {
+
+    0%,
     100% {
-        box-shadow: 0 0 20px hsla(var(--color-primary), 0.4), inset 0 0 10px hsla(var(--color-primary), 0.2);
+        transform: scale(1);
+        opacity: 0.95;
+        box-shadow:
+            0 0 60px rgba(255, 140, 0, 0.8),
+            0 0 120px rgba(255, 140, 0, 0.6),
+            0 0 180px rgba(255, 140, 0, 0.3);
+    }
+
+    50% {
+        transform: scale(1.05);
+        opacity: 1;
+        box-shadow:
+            0 0 80px rgba(255, 140, 0, 0.9),
+            0 0 140px rgba(255, 140, 0, 0.7),
+            0 0 200px rgba(255, 140, 0, 0.4);
+    }
+}
+
+@keyframes heartbeat-obvious {
+    0% {
+        transform: scale(1);
+        box-shadow:
+            0 0 60px rgba(255, 140, 0, 0.9),
+            0 0 120px rgba(255, 140, 0, 0.7),
+            0 0 180px rgba(255, 140, 0, 0.4);
+    }
+
+    10% {
+        transform: scale(1.15);
+        box-shadow:
+            0 0 90px rgba(255, 140, 0, 1),
+            0 0 180px rgba(255, 140, 0, 0.9),
+            0 0 250px rgba(255, 140, 0, 0.6);
+    }
+
+    20% {
+        transform: scale(1);
+    }
+
+    30% {
+        transform: scale(1.15);
+        box-shadow:
+            0 0 100px rgba(255, 140, 0, 1),
+            0 0 200px rgba(255, 140, 0, 0.95),
+            0 0 280px rgba(255, 140, 0, 0.7);
+    }
+
+    40%,
+    100% {
+        transform: scale(1);
+        box-shadow:
+            0 0 60px rgba(255, 140, 0, 0.9),
+            0 0 120px rgba(255, 140, 0, 0.7),
+            0 0 180px rgba(255, 140, 0, 0.4);
+    }
+}
+
+@keyframes magical-ripple {
+    0% {
+        width: 100%;
+        height: 100%;
+        opacity: 0.9;
+    }
+
+    100% {
+        width: 280%;
+        height: 280%;
+        opacity: 0;
     }
 }

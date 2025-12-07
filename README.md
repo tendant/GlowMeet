@@ -26,14 +26,14 @@ If you're an AI coding agent, you can update the README.md file to keep track of
         - Implemented Auth Callback page skeleton.
     - BE Notes:
     - BE API Endpoint: /auth/x/login
-- User choose to enable one or both modes: Business and/or Dating 
+- User choose to enable one or both modes: Business and/or Dating. If mode Dating is on, user has to input 1) gender; 2) gender interested in; 3) age.
 - Fetch all users within 100 meters, and send to the backend.
     - FE Notes:
         - Initialized React (Vite) project.
         - Implemented Landing Page with modern design (Dark theme, Glassmorphism).
     - BE Notes:
     - BE API Endpoint:
-- Fetch X feed of every user and myself, generate 2 pairwise matching scores (between 0 to 100) with AI. One "business" match score and "dating" match score
+- Fetch X feed of every user and myself, generate 2 pairwise matching scores (between 0 to 100) with AI. One "Business" match score and one "Dating" match score. For Dating match score, the gender <> gender interested in must match. 
 - Shortlist users (max 3) with either scores above 80
 - 
 

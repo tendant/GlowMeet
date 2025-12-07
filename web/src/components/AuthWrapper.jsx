@@ -43,6 +43,8 @@ const AuthWrapper = () => {
                             },
                             body: JSON.stringify({ lat: latitude, long: longitude })
                         });
+                        // Update local user state with new location
+                        setUser(prev => prev ? { ...prev, lat: latitude, long: longitude } : prev);
                         console.log(`[Geo] Sent location: ${latitude}, ${longitude}`);
                     } catch (err) {
                         console.error("[Geo] Failed to update location:", err);

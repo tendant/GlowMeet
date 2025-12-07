@@ -130,12 +130,14 @@ func (s *server) routes() http.Handler {
 func (s *server) handleXLogin(w http.ResponseWriter, r *http.Request) {
 	state, err := randomString(32)
 	if err != nil {
+		logError(r, "state generation failed", err)
 		writeError(w, http.StatusInternalServerError, "state generation failed")
 		return
 	}
 
 	verifier, err := randomString(64)
 	if err != nil {
+		logError(r, "verifier generation failed", err)
 		writeError(w, http.StatusInternalServerError, "verifier generation failed")
 		return
 	}
@@ -160,12 +162,14 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 
 	if state == "" || code == "" {
+		logError(r, "callback missing state or code", nil)
 		writeError(w, http.StatusBadRequest, "missing state or code")
 		return
 	}
 
 	verifier, ok := s.states.pop(state)
 	if !ok {
+		logError(r, "invalid or expired state", nil)
 		writeError(w, http.StatusBadRequest, "invalid or expired state")
 		return
 	}
@@ -175,6 +179,7 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 
 	token, err := s.oauth.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", verifier))
 	if err != nil {
+		logError(r, "token exchange failed", err)
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("token exchange failed: %v", err))
 		return
 	}
@@ -258,4 +263,14 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func logError(r *http.Request, msg string, err error) {
+	requestID := middleware.GetReqID(r.Context())
+	prefix := fmt.Sprintf("req_id=%s %s %s", requestID, r.Method, r.URL.Path)
+	if err != nil {
+		log.Printf("%s: %s: %v", prefix, msg, err)
+		return
+	}
+	log.Printf("%s: %s", prefix, msg)
 }

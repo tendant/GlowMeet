@@ -143,6 +143,7 @@ func newServer(cfg *Config) *server {
 	}
 
 	s.seedUsers()
+	s.seedMatches()
 	return s
 }
 
@@ -1089,7 +1090,7 @@ Output purely JSON in the following format:
 	// Generate AI Background Image based on summary
 	var imageURL string
 	if result.Summary != "" {
-		imagePrompt := fmt.Sprintf("A creative, background header image for a social media profile of a user described as: %s. Digital art style, vibrant, high quality, portrait aspect ratio that will fit in a mobile phone, abstract or scenic.", result.Summary)
+		imagePrompt := fmt.Sprintf("A cool, modernistic, abstract avatar representation of a matching persona described as: %s. Cyberpunk, vaporwave, or futuristic digital art style. High quality, vibrant colors, artistic, creative composition.", result.Summary)
 		img, err := client.GenerateImage(context.Background(), imagePrompt)
 		if err != nil {
 			log.Printf("xai image generation failed for user=%s: %v", userID, err)
@@ -1238,6 +1239,35 @@ func redisTokenKey(userID string) string {
 func (s *server) seedUsers() {
 	if err := s.users.loadFromFile("data/users.json"); err != nil {
 		log.Printf("warning: could not load fake users from data/users.json: %v", err)
+	} else {
+		// Populate tweetStore with seed data and trigger analysis
+		s.users.mu.Lock()
+		// Collect IDs first to avoid long lock if we did more logic
+		var usersToAnalyze []struct {
+			ID     string
+			Tweets []string
+		}
+		for _, u := range s.users.data {
+			if len(u.Tweets) > 0 {
+				s.tweets.set(u.ID, u.Tweets)
+				usersToAnalyze = append(usersToAnalyze, struct {
+					ID     string
+					Tweets []string
+				}{u.ID, u.Tweets})
+			}
+		}
+		s.users.mu.Unlock()
+
+		// Trigger XAI analysis for fake users (async)
+		for _, u := range usersToAnalyze {
+			go s.callXAIAnalysis(u.ID, u.Tweets)
+		}
+	}
+}
+
+func (s *server) seedMatches() {
+	if err := s.matcher.LoadFromFile("data/matches.json"); err != nil {
+		log.Printf("warning: could not load fake matches from data/matches.json: %v", err)
 	}
 }
 

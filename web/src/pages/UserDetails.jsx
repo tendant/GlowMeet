@@ -83,7 +83,10 @@ const UserDetails = () => {
                     <div className="ai-bg-card">
                         <span className="ai-badge">AI Insight</span>
                         <img src={user.bgImage} alt="AI Generated Background" className="bg-image" />
-                        <h1 className="details-username-hero">{user.username}</h1>
+                        <h1 className="details-username-hero">
+                            {user.name}
+                            <span className="details-handle">{user.username}</span>
+                        </h1>
                         <p className="ai-summary">
                             {user.match_info?.reason || user.summary}
                         </p>

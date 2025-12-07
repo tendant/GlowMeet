@@ -6,11 +6,19 @@ import (
 	"fmt"
 	"glowmeet/xai"
 	"log"
+	"os"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 )
+
+type persistedMatch struct {
+	ViewerID string  `json:"viewer_id"`
+	TargetID string  `json:"target_id"`
+	Score    float64 `json:"score"`
+	Reason   string  `json:"reason"`
+}
 
 type AIClient interface {
 	CreateChatCompletion(ctx context.Context, req xai.ChatRequest) (*xai.ChatResponse, error)
@@ -72,10 +80,42 @@ func NewServiceWithClient(client AIClient) *Service {
 	return s
 }
 
+// LoadFromFile loads pre-calculated matches from a JSON file.
+func (s *Service) LoadFromFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	var matches []persistedMatch
+	if err := json.Unmarshal(data, &matches); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	count := 0
+	for _, m := range matches {
+		if _, ok := s.cache[m.ViewerID]; !ok {
+			s.cache[m.ViewerID] = make(map[string]MatchResult)
+		}
+		s.cache[m.ViewerID][m.TargetID] = MatchResult{
+			TargetID:  m.TargetID,
+			Score:     m.Score,
+			Reason:    m.Reason,
+			Timestamp: time.Now(),
+		}
+		count++
+	}
+	log.Printf("[matcher] loaded %d matches from %s", count, path)
+	return nil
+}
+
 // GetMatch returns a specific match result from cache. Returns empty if not found.
 func (s *Service) GetMatch(viewerID, targetID string) MatchResult {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	// s.mu.RLock()
+	// defer s.mu.RUnlock()
 
 	if viewerDeps, ok := s.cache[viewerID]; ok {
 		if match, ok := viewerDeps[targetID]; ok {
@@ -87,8 +127,8 @@ func (s *Service) GetMatch(viewerID, targetID string) MatchResult {
 
 // GetTopMatches returns the top N matches for the viewer.
 func (s *Service) GetTopMatches(viewerID string, n int) []MatchResult {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	// s.mu.RLock()
+	// defer s.mu.RUnlock()
 
 	viewerDeps, ok := s.cache[viewerID]
 	if !ok || len(viewerDeps) == 0 {
@@ -144,8 +184,8 @@ func (s *Service) worker(id int) {
 }
 
 func (s *Service) updateCache(viewerID, targetID string, res MatchResult) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// s.mu.Lock()
+	// defer s.mu.Unlock()
 
 	if _, ok := s.cache[viewerID]; !ok {
 		s.cache[viewerID] = make(map[string]MatchResult)
@@ -165,7 +205,7 @@ User B: %s. Interests: %s. Recent tweets: %s.
 
 Return JSON: {
   "score": 0-100, 
-  "reason": "1 romantic, engaging sentence explaining why these two are a perfect match, addressing User A as 'You' and phrasing it to make them excited to meet. E.g. 'You both love hiking and coffee, making for a perfect first date in the mountains!'"
+  "reason": "Very brief sentence on why they are a good match. Address User A as 'You'. E.g. 'You both love hiking and outdoor adventures!'"
 }`,
 		v.Summary, v.Interests, strings.Join(truncate(v.Tweets, 5), " | "),
 		c.Summary, c.Interests, strings.Join(truncate(c.Tweets, 5), " | "))

@@ -80,7 +80,7 @@ func loadConfig() (*Config, error) {
 		ClientSecret:  os.Getenv("X_CLIENT_SECRET"),
 		RedirectURL:   os.Getenv("X_REDIRECT_URL"),
 		AllowedOrigin: getEnv("CORS_ORIGIN", "*"),
-		FrontendURL:   getEnv("FRONTEND_URL", "http://localhost:3000"),
+		FrontendURL:   getEnv("FRONTEND_URL", "/"),
 		JWTSecret:     os.Getenv("APP_JWT_SECRET"),
 		JWTTTL:        getEnvDuration("APP_JWT_TTL", 24*time.Hour),
 	}
@@ -250,6 +250,7 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 		Expires:  token.Expiry,
 	})
 
+	redirectTarget := resolveRedirectTarget(s.config.FrontendURL)
 	if wantsJSON(r) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"session":        sessionID,
@@ -259,7 +260,7 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, s.config.FrontendURL, http.StatusFound)
+	http.Redirect(w, r, redirectTarget, http.StatusFound)
 }
 
 func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
@@ -631,6 +632,20 @@ func requestMetaLogger(next http.Handler) http.Handler {
 
 func wantsJSON(r *http.Request) bool {
 	return strings.Contains(r.Header.Get("Accept"), "application/json")
+}
+
+func resolveRedirectTarget(frontendURL string) string {
+	if frontendURL == "" {
+		return "/"
+	}
+	lowered := strings.ToLower(frontendURL)
+	if strings.HasPrefix(lowered, "http://") || strings.HasPrefix(lowered, "https://") {
+		return frontendURL
+	}
+	if !strings.HasPrefix(frontendURL, "/") {
+		return "/" + frontendURL
+	}
+	return frontendURL
 }
 
 func min(a, b int) int {

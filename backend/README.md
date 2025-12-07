@@ -4,7 +4,7 @@ Golang chi demo that handles X.com OAuth login with PKCE.
 
 ## Setup
 
-1) Copy env: `cp .env.example .env` and fill `X_CLIENT_ID`, `X_CLIENT_SECRET`, `X_REDIRECT_URL` (match your X app redirect; use the frontend origin like `http://localhost:3000/auth/x/callback` when proxying), and `APP_JWT_SECRET`.  
+1) Copy env: `cp .env.example .env` and fill `X_CLIENT_ID`, `X_CLIENT_SECRET`, `X_REDIRECT_URL` (match your X app redirect; use the frontend origin like `http://localhost:3000/auth/x/callback` when proxying), and `APP_JWT_SECRET`. `FRONTEND_URL` can be a relative path (default `/`) to avoid hardcoded localhost redirects.  
 2) Run: `go run main.go` from the `backend` directory.  
 3) Backend defaults to `:8000` and allows CORS from `CORS_ORIGIN`.
 

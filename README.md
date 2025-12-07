@@ -3,8 +3,12 @@ GlowMeet is a social media platform for people with similar interests to connect
 
 # Tech Stack
 Backend: Goland
-Frontend: React RWA App
+Frontend: React RWA App, compiled to static files for deployment.
 Social Login: X (Formerly Twitter)
+
+# Development rules
+If your github username is leimd, only change files in the web folder.
+If your github username is tendant, only change files in the backend folder.
 
 # User Stories
 - User can sign up with X (Formerly Twitter)

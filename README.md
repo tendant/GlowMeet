@@ -39,9 +39,16 @@ For each front end feature, check the backend api code to understand the backend
     - FE Notes:
     - BE Notes:
     - BE API Endpoint:
+- One glowing + dancing dot for each shortlisted user would appear on the screen. The higher the score, the brighter and bigger the dot is. Pink-purple dot for Dating matches. Orange dot for Business matches.
+    - BE
+    
+- A user can click a dot to view: 
+    1) An AI summary of why this person is a good match. Eg. You have common interests with Tom on xAI, skiing, and backpacking trips. 
+    2) A button to send connection request 
+    3) The user’s X feed 
+ When you receive a connection request: 
+Same glowing dot would show up 
 
-
-- Next requirement
     - FE Notes:
     - BE Notes:
     - BE API Endpoint:

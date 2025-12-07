@@ -418,6 +418,16 @@ func (s *server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		return u
 	})
 
+	// Trigger XAI analysis to update summary/score based on new interests
+	if body.Interests != "" {
+		tweets := s.tweets.get(existing.UserID)
+		// Even if no tweets, we might want to re-run if interests exist (though current logic requires tweets context-wise)
+		// Current callXAIAnalysis checks for len(tweets) > 0.
+		if len(tweets) > 0 {
+			go s.callXAIAnalysis(existing.UserID, tweets)
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"interests": body.Interests,
 	})

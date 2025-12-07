@@ -16,7 +16,7 @@
     {
         "id": "2",
         "name": "Alice Chen",
-        "username": "@alicec",
+        "username": "@aliexport PATH=$PATH:~/go/bin cec",
         "lat": 37.775000,
         "long": -122.419500,
         "summary": "Designer and artist. I see the world in colors.",

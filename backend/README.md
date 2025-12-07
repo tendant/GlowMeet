@@ -14,6 +14,7 @@ Golang chi demo that handles X.com OAuth login with PKCE.
 - `GET /auth/x/login` — returns `authorization_url` and `state` you can redirect the user to.  
 - `GET /auth/x/callback?code=...&state=...` — exchanges the code using the stored PKCE verifier; creates a JWT app session cookie `access_token` (sub = X user id), stores the X OAuth token server-side keyed by user id, and redirects to `FRONTEND_URL`.  
 - `GET /api/me` — uses the session cookie to look up the stored X token and fetch the user profile from X.com.  
+- `POST /api/me` — updates the user's geolocation. Expects JSON struct: `{"lat": 37.7749, "long": -122.4194}`.
 - `GET /api/users` — returns up to 20 recently seen users (in-memory list).
 
 State + PKCE verifiers + user list live in-memory; wire your own session or persistence layer for production.

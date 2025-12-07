@@ -9,31 +9,33 @@ const UserDetails = () => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    // Mock data based on userId for now, since we only have list endpoint not individual yet or simplified
+    const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
     useEffect(() => {
-        // Simulating fetch
         const fetchUser = async () => {
-            // In a real app, fetch `${apiBase}/api/users/${userId}`
-            // For now, we'll just mock it based on the ID to show the UI
-            setTimeout(() => {
-                setUser({
-                    id: userId,
-                    name: `User ${userId.substring(0, 4)}...`, // Placeholder
-                    username: `@user${userId.substring(0, 4)}`,
-                    summary: "Loves photography, hiking, and exploring new coffee shops. Always looking for the next great adventure and someone to share it with.",
-                    bgImage: `https://picsum.photos/seed/${userId}/800/400`,
-                    tweets: [
-                        "Just saw the most amazing sunset! 🌅 #nature #vibes",
-                        "Coffee is life. Anyone know a good spot in downtown?",
-                        "Thinking about my next trip. Japan or Iceland? ✈️",
-                        "Coding late into the night. The flow is real."
-                    ]
-                });
+            try {
+                const response = await fetch(`${apiBase}/api/users/${userId}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setUser({
+                        ...data,
+                        bgImage: data.bg_image, // Map snake_case to camelCase
+                        profileImage: data.profile_image_url
+                    });
+                } else {
+                    console.error("Failed to fetch user details");
+                }
+            } catch (error) {
+                console.error("Error fetching user details:", error);
+            } finally {
                 setLoading(false);
-            }, 500);
+            }
         };
-        fetchUser();
-    }, [userId]);
+
+        if (userId) {
+            fetchUser();
+        }
+    }, [userId, apiBase]);
 
     const goBack = () => navigate(-1);
 

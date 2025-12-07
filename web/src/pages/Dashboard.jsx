@@ -1,9 +1,11 @@
 import { useState, useContext, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import UserContext from "../context/UserContext";
 import Header from "../components/Header";
 import "./Dashboard.css";
 
 const Dashboard = () => {
+    const navigate = useNavigate();
     const user = useContext(UserContext);
     const [isActive, setIsActive] = useState(false);
     const [matches, setMatches] = useState([]);
@@ -101,12 +103,7 @@ const Dashboard = () => {
                     const animationDelay = `${index * 0.7}s`;
                     const animationDuration = `${2.5 + index * 0.5}s`;
 
-                    // Darker version of color for text
-                    const darkerColor = color.replace('#', '');
-                    const r = parseInt(darkerColor.substr(0, 2), 16);
-                    const g = parseInt(darkerColor.substr(2, 2), 16);
-                    const b = parseInt(darkerColor.substr(4, 2), 16);
-                    const textColor = `rgb(${Math.floor(r * 0.5)}, ${Math.floor(g * 0.5)}, ${Math.floor(b * 0.5)})`;
+
 
                     return (
                         <div
@@ -132,7 +129,7 @@ const Dashboard = () => {
                             }}
                             title={match.name || match.username}
                         >
-                            <span className="orb-username" style={{ color: textColor }}>
+                            <span className="orb-username">
                                 {match.name || match.username}
                             </span>
                         </div>

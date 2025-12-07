@@ -15,6 +15,7 @@ const UserDetails = () => {
         const fetchUser = async () => {
             try {
                 const response = await fetch(`${apiBase}/api/users/${userId}`);
+<<<<<<< HEAD
                 if (response.ok) {
                     const data = await response.json();
                     setUser({
@@ -27,6 +28,33 @@ const UserDetails = () => {
                 }
             } catch (error) {
                 console.error("Error fetching user details:", error);
+=======
+                if (!response.ok) {
+                    throw new Error('User not found');
+                }
+                const data = await response.json();
+
+                // Map backend snake_case to frontend state structure if needed
+                // Backend returns: id, name, username, bg_image, tweets, summary, description
+                setUser({
+                    id: data.id,
+                    name: data.name,
+                    username: data.username,
+                    // Use summary if available, otherwise description, otherwise fallback
+                    summary: data.summary || data.description || "No summary available.",
+                    // Use bg_image if available, otherwise random fallback
+                    bgImage: data.bg_image || `https://picsum.photos/seed/${userId}/800/400`,
+                    tweets: data.tweets || [
+                        "Just joined GlowMeet! Excited to connect.",
+                        "Looking for fellow explorers in the city.",
+                        "Anyone up for a coffee chat?"
+                    ]
+                });
+            } catch (err) {
+                console.error("Failed to fetch user:", err);
+                // Fallback or error state could be handled here
+                // For now keeping loading false so it renders empty or stays
+>>>>>>> 1a95220 (Add Dashboard link)
             } finally {
                 setLoading(false);
             }

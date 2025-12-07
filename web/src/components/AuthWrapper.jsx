@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
+import UserContext from "../context/UserContext";
 
 const AuthWrapper = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
+    const [user, setUser] = useState(null);
     const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
     useEffect(() => {
@@ -13,6 +15,8 @@ const AuthWrapper = () => {
                 if (!response.ok) {
                     throw new Error("Unauthorized");
                 }
+                const userData = await response.json();
+                setUser(userData);
                 setLoading(false);
             } catch (error) {
                 console.error("Auth check failed:", error);
@@ -62,7 +66,11 @@ const AuthWrapper = () => {
         );
     }
 
-    return <Outlet />;
+    return (
+        <UserContext.Provider value={user}>
+            <Outlet />
+        </UserContext.Provider>
+    );
 };
 
 export default AuthWrapper;

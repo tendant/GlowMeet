@@ -1,0 +1,86 @@
+/* Joy Card Container */
+.joy-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    width: 300px;
+    margin: 0 auto;
+    /* Glassmorphism inheritance + specific layout */
+    background: hsla(var(--color-bg-surface), 0.6);
+    backdrop-filter: blur(12px);
+    border: 1px solid hsla(255, 100%, 100%, 0.1);
+    border-radius: var(--radius-lg);
+    position: relative;
+    overflow: hidden;
+}
+
+.joy-title {
+    font-family: 'Inter', sans-serif; /* Or a handwritten font if added later */
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 3rem;
+    /* Inherit main text color or specific styling */
+    color: hsl(var(--color-text-main));
+}
+
+/* The Connection Circle */
+.connection-circle {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.5s ease-in-out;
+    border: 4px dashed;
+    text-align: center;
+    padding: 1rem;
+    position: relative;
+    background: transparent;
+}
+
+/* Default / Dimmed State */
+.connection-circle:not(.active) {
+    border-color: hsla(var(--color-text-muted), 0.3);
+    color: hsla(var(--color-text-muted), 0.7);
+    box-shadow: none;
+}
+
+/* Hover Effect for Dimmed State */
+.connection-circle:not(.active):hover {
+    border-color: hsla(var(--color-text-muted), 0.6);
+    color: hsl(var(--color-text-main));
+    transform: scale(1.02);
+}
+
+/* Active / Lit Up State */
+.connection-circle.active {
+    border-color: hsl(var(--color-primary));
+    color: hsl(var(--color-primary)); /* Or bright orange as per mockup 'Open to connect' color? Prompt said "light up" */
+    box-shadow: 0 0 20px hsla(var(--color-primary), 0.4), inset 0 0 10px hsla(var(--color-primary), 0.2);
+    /* Make the border solid or keep dashed? Mockup shows dashed. Keeping dashed but glowing. */
+    border-style: dashed;
+    animation: pulse-glow 2s infinite;
+}
+
+.circle-text {
+    font-weight: 600;
+    font-size: 1.1rem;
+    pointer-events: none; /* Let clicks pass to parent */
+    user-select: none;
+}
+
+@keyframes pulse-glow {
+    0% {
+        box-shadow: 0 0 20px hsla(var(--color-primary), 0.4), inset 0 0 10px hsla(var(--color-primary), 0.2);
+    }
+    50% {
+        box-shadow: 0 0 35px hsla(var(--color-primary), 0.6), inset 0 0 15px hsla(var(--color-primary), 0.3);
+    }
+    100% {
+        box-shadow: 0 0 20px hsla(var(--color-primary), 0.4), inset 0 0 10px hsla(var(--color-primary), 0.2);
+    }
+}

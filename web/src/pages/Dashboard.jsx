@@ -1,13 +1,22 @@
-
+import { useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
+import UserContext from "../context/UserContext";
+import "./Dashboard.css";
 
 const Dashboard = () => {
     const navigate = useNavigate();
+    const user = useContext(UserContext);
+    const [isActive, setIsActive] = useState(false);
+
     const handleLogout = () => {
         // Clear tokens/state if stored client side
         document.cookie = "access_token=; Max-Age=0; path=/";
         document.cookie = "refresh_token=; Max-Age=0; path=/";
         navigate("/login");
+    };
+
+    const toggleConnection = () => {
+        setIsActive(!isActive);
     };
 
     return (
@@ -23,17 +32,21 @@ const Dashboard = () => {
                 </div>
             </header>
 
-            <div className="container" style={{ padding: "40px 20px" }}>
-                <h1 className="hero-title" style={{ fontSize: "2.5rem", marginBottom: "30px" }}>
-                    Welcome Back <span className="glow-text">Creator</span>
-                </h1>
+            <div className="center-content">
+                <div className="joy-card">
+                    <h2 className="joy-title">{user?.name || user?.username || "Joy"}</h2>
 
-                <div className="glass-card">
-                    <p style={{ color: "var(--color-text-muted)" }}>
-                        You are now logged in. This is where your personalized feed and matching will happen.
-                    </p>
+                    <div
+                        className={`connection-circle ${isActive ? 'active' : ''}`}
+                        onClick={toggleConnection}
+                    >
+                        <span className="circle-text">
+                            {isActive ? "Open to connect" : "Open Now!"}
+                        </span>
+                    </div>
                 </div>
             </div>
+
             <div className="glow-orb" style={{ top: '20%', width: '500px', height: '500px' }}></div>
         </div>
     );

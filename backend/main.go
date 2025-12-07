@@ -62,7 +62,7 @@ type server struct {
 	config  *Config
 	oauth   *oauth2.Config
 	states  *stateStore
-	users   *userStore
+	users   UserStore
 	tokens  tokenStore
 	tweets  *tweetStore
 	matcher *matching.Service
@@ -136,10 +136,10 @@ func newServer(cfg *Config) *server {
 			},
 		},
 		states:  newStateStore(10 * time.Minute),
-		users:   newUserStore(50),
+		users:   newUserStore(cfg),
 		tokens:  newTokenStoreFromConfig(cfg),
 		tweets:  newTweetStore(50),
-		matcher: matching.NewService(cfg.XAiAPIKey),
+		matcher: matching.NewService(cfg.XAiAPIKey, cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB),
 	}
 
 	s.seedUsers()
@@ -601,10 +601,37 @@ type userProfile struct {
 	Description     string   `json:"description,omitempty"`
 }
 
-type userStore struct {
+type UserStore interface {
+	upsert(u userProfile)
+	get(userID string) (userProfile, bool)
+	top(n int) []userProfile
+	getAllAsInputs() []matching.UserInput
+	updateXAIData(userID, summary, imageURL string, score float64)
+	updateLocation(userID string, lat, long float64)
+	updateProfile(userID string, mutate func(userProfile) userProfile)
+	loadFromFile(path string) error
+	getRawMap() map[string]userProfile // helper for seeding logic access if needed, or refactor seeding
+}
+
+// memoryUserStore implementation
+type memoryUserStore struct {
 	mu   sync.Mutex
 	lim  int
 	data map[string]userProfile
+}
+
+func (s *memoryUserStore) getRawMap() map[string]userProfile {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.data
+}
+
+type redisUserStore struct {
+	client *redis.Client
+}
+
+func (s *redisUserStore) getRawMap() map[string]userProfile {
+	return nil // not supported in redis mode effectively or implemented differently
 }
 
 type tokenInfo struct {
@@ -637,9 +664,27 @@ type tweetStore struct {
 	lastFetched map[string]time.Time
 }
 
-func newUserStore(limit int) *userStore {
-	return &userStore{
-		lim:  limit,
+func newUserStore(cfg *Config) UserStore {
+	if cfg.Persistence == "redis" && cfg.RedisAddr != "" {
+		opts := &redis.Options{
+			Addr:     cfg.RedisAddr,
+			Password: cfg.RedisPassword,
+			DB:       cfg.RedisDB,
+			TLSConfig: func() *tls.Config {
+				if cfg.RedisTLS {
+					return &tls.Config{InsecureSkipVerify: false}
+				}
+				return nil
+			}(),
+		}
+		client := redis.NewClient(opts)
+		// No strict ping here to allow fallback logic in other places or lazy connect,
+		// but consistent with token store, we return redis store.
+		return &redisUserStore{client: client}
+	}
+
+	return &memoryUserStore{
+		lim:  50,
 		data: make(map[string]userProfile),
 	}
 }
@@ -686,7 +731,7 @@ func newTweetStore(limit int) *tweetStore {
 	}
 }
 
-func (s *userStore) upsert(u userProfile) {
+func (s *memoryUserStore) upsert(u userProfile) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if u.MatchingScore == 0 {
@@ -707,7 +752,13 @@ func (s *userStore) upsert(u userProfile) {
 	}
 }
 
-func (s *userStore) loadFromFile(path string) error {
+func (s *redisUserStore) upsert(u userProfile) {
+	ctx := context.Background()
+	data, _ := json.Marshal(u)
+	s.client.Set(ctx, "user:"+u.ID, data, 0)
+}
+
+func (s *memoryUserStore) loadFromFile(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -725,7 +776,26 @@ func (s *userStore) loadFromFile(path string) error {
 	return nil
 }
 
-func (s *userStore) top(n int) []userProfile {
+func (s *redisUserStore) loadFromFile(path string) error {
+	// Same logic, just calls upsert
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	var users []userProfile
+	if err := json.NewDecoder(f).Decode(&users); err != nil {
+		return err
+	}
+
+	for _, u := range users {
+		s.upsert(u)
+	}
+	return nil
+}
+
+func (s *memoryUserStore) top(n int) []userProfile {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	result := make([]userProfile, 0, min(n, len(s.data)))
@@ -738,7 +808,24 @@ func (s *userStore) top(n int) []userProfile {
 	return result
 }
 
-func (s *userStore) getAllAsInputs() []matching.UserInput {
+func (s *redisUserStore) top(n int) []userProfile {
+	// naive scan for now
+	ctx := context.Background()
+	keys, _ := s.client.Keys(ctx, "user:*").Result()
+	out := []userProfile{}
+	for _, k := range keys {
+		val, _ := s.client.Get(ctx, k).Bytes()
+		var u userProfile
+		json.Unmarshal(val, &u)
+		out = append(out, u)
+		if len(out) >= n {
+			break
+		}
+	}
+	return out
+}
+
+func (s *memoryUserStore) getAllAsInputs() []matching.UserInput {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]matching.UserInput, 0, len(s.data))
@@ -749,16 +836,31 @@ func (s *userStore) getAllAsInputs() []matching.UserInput {
 			Username:  u.Username,
 			Summary:   u.Summary,
 			Interests: u.Interests,
-			// Tweets are stored separately, populated by caller if needed,
-			// but for simplistic bulk matching we might skip full tweet text
-			// if Summary/Interests are the main driver, or we look them up.
-			// The matching service expects Tweets.
 		})
 	}
 	return out
 }
 
-func (s *userStore) updateXAIData(userID, summary, imageURL string, score float64) {
+func (s *redisUserStore) getAllAsInputs() []matching.UserInput {
+	ctx := context.Background()
+	keys, _ := s.client.Keys(ctx, "user:*").Result()
+	out := []matching.UserInput{}
+	for _, k := range keys {
+		val, _ := s.client.Get(ctx, k).Bytes()
+		var u userProfile
+		json.Unmarshal(val, &u)
+		out = append(out, matching.UserInput{
+			ID:        u.ID,
+			Name:      u.Name,
+			Username:  u.Username,
+			Summary:   u.Summary,
+			Interests: u.Interests,
+		})
+	}
+	return out
+}
+
+func (s *memoryUserStore) updateXAIData(userID, summary, imageURL string, score float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if user, ok := s.data[userID]; ok {
@@ -771,7 +873,19 @@ func (s *userStore) updateXAIData(userID, summary, imageURL string, score float6
 	}
 }
 
-func (s *userStore) updateLocation(userID string, lat, long float64) {
+func (s *redisUserStore) updateXAIData(userID, summary, imageURL string, score float64) {
+	u, ok := s.get(userID)
+	if ok {
+		u.Summary = summary
+		if imageURL != "" {
+			u.BgImage = imageURL
+		}
+		u.MatchingScore = score
+		s.upsert(u)
+	}
+}
+
+func (s *memoryUserStore) updateLocation(userID string, lat, long float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if user, ok := s.data[userID]; ok {
@@ -781,14 +895,34 @@ func (s *userStore) updateLocation(userID string, lat, long float64) {
 	}
 }
 
-func (s *userStore) get(userID string) (userProfile, bool) {
+func (s *redisUserStore) updateLocation(userID string, lat, long float64) {
+	u, ok := s.get(userID)
+	if ok {
+		u.Lat = lat
+		u.Long = long
+		s.upsert(u)
+	}
+}
+
+func (s *memoryUserStore) get(userID string) (userProfile, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	user, ok := s.data[userID]
 	return user, ok
 }
 
-func (s *userStore) updateProfile(userID string, mutate func(userProfile) userProfile) {
+func (s *redisUserStore) get(userID string) (userProfile, bool) {
+	ctx := context.Background()
+	val, err := s.client.Get(ctx, "user:"+userID).Bytes()
+	if err != nil {
+		return userProfile{}, false
+	}
+	var u userProfile
+	json.Unmarshal(val, &u)
+	return u, true
+}
+
+func (s *memoryUserStore) updateProfile(userID string, mutate func(userProfile) userProfile) {
 	if mutate == nil {
 		return
 	}
@@ -798,8 +932,14 @@ func (s *userStore) updateProfile(userID string, mutate func(userProfile) userPr
 	if !ok {
 		return
 	}
-	user = mutate(user)
-	s.data[userID] = user
+	s.data[userID] = mutate(user)
+}
+
+func (s *redisUserStore) updateProfile(userID string, mutate func(userProfile) userProfile) {
+	u, ok := s.get(userID)
+	if ok {
+		s.upsert(mutate(u))
+	}
 }
 
 func defaultScore(id string) float64 {
@@ -1241,26 +1381,45 @@ func (s *server) seedUsers() {
 		log.Printf("warning: could not load fake users from data/users.json: %v", err)
 	} else {
 		// Populate tweetStore with seed data and trigger analysis
-		s.users.mu.Lock()
-		// Collect IDs first to avoid long lock if we did more logic
-		var usersToAnalyze []struct {
-			ID     string
-			Tweets []string
-		}
-		for _, u := range s.users.data {
-			if len(u.Tweets) > 0 {
-				s.tweets.set(u.ID, u.Tweets)
-				usersToAnalyze = append(usersToAnalyze, struct {
+		// Since we are now behind an interface, we can't lock s.users.mu directly if it's the interface.
+		// However, for seeding we know we just loaded data.
+		// Let's rely on getAllAsInputs (which doesn't return tweets in current impl?) or just refactor.
+		// Actually, loadFromFile calls upsert. so data is there.
+		// We need to iterate all users to set tweets in tweetStore.
+
+		// We can add a helper to iterate or just use a type assertion if we really want to optimize,
+		// but let's just use a top-like scan or add a helper to the interface effectively.
+		// For now, let's use the `top` method with a large number or just use getRawMap if we are in memory mode.
+		// But in redis mode, loadFromFile puts them in redis.
+
+		// Simple approach: get all users via getAllAsInputs (we need to update it to include Tweets or load them separately)
+		// Wait, getAllAsInputs commented out tweets.
+		// Let's just use the file data directly since we just read it!
+		// That avoids all interface issues.
+		f, err := os.Open("data/users.json")
+		if err == nil {
+			defer f.Close()
+			var users []userProfile
+			if err := json.NewDecoder(f).Decode(&users); err == nil {
+				var usersToAnalyze []struct {
 					ID     string
 					Tweets []string
-				}{u.ID, u.Tweets})
-			}
-		}
-		s.users.mu.Unlock()
+				}
 
-		// Trigger XAI analysis for fake users (async)
-		for _, u := range usersToAnalyze {
-			go s.callXAIAnalysis(u.ID, u.Tweets)
+				for _, u := range users {
+					if len(u.Tweets) > 0 {
+						s.tweets.set(u.ID, u.Tweets)
+						usersToAnalyze = append(usersToAnalyze, struct {
+							ID     string
+							Tweets []string
+						}{u.ID, u.Tweets})
+					}
+				}
+
+				for _, u := range usersToAnalyze {
+					go s.callXAIAnalysis(u.ID, u.Tweets)
+				}
+			}
 		}
 	}
 }

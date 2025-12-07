@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type persistedMatch struct {
@@ -46,56 +48,76 @@ type UserInput struct {
 type Service struct {
 	aiClient AIClient
 
-	// Cache: Map[ViewerID] -> []MatchResult
-	mu    sync.RWMutex
-	cache map[string]map[string]MatchResult
+	// Storage driver
+	storage Storage
 
 	// Worker pool
 	jobs chan matchingJob
 }
 
-type matchingJob struct {
-	viewer    UserInput
-	candidate UserInput
+type Storage interface {
+	GetMatch(viewerID, targetID string) (MatchResult, bool)
+	GetTopMatches(viewerID string, n int) []MatchResult
+	UpdateMatch(viewerID, targetID string, res MatchResult)
+	LoadFromFile(path string) error
 }
 
-// NewService creates a new matching service with a background worker pool.
-func NewService(apiKey string) *Service {
-	return NewServiceWithClient(xai.NewClient(apiKey))
+type MemoryStorage struct {
+	mu    sync.RWMutex
+	cache map[string]map[string]MatchResult
 }
 
-// NewServiceWithClient creates a new matching service with a provided AI client (useful for testing).
-func NewServiceWithClient(client AIClient) *Service {
-	s := &Service{
-		aiClient: client,
-		cache:    make(map[string]map[string]MatchResult),
-		jobs:     make(chan matchingJob, 1000), // Buffer for pending calculations
+func (s *MemoryStorage) GetMatch(viewerID, targetID string) (MatchResult, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if vDeps, ok := s.cache[viewerID]; ok {
+		if m, ok := vDeps[targetID]; ok {
+			return m, true
+		}
 	}
-
-	// Start 5 background workers
-	for i := 0; i < 5; i++ {
-		go s.worker(i)
-	}
-
-	return s
+	return MatchResult{}, false
 }
 
-// LoadFromFile loads pre-calculated matches from a JSON file.
-func (s *Service) LoadFromFile(path string) error {
+func (s *MemoryStorage) GetTopMatches(viewerID string, n int) []MatchResult {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	vDeps, ok := s.cache[viewerID]
+	if !ok || len(vDeps) == 0 {
+		return []MatchResult{}
+	}
+	matches := make([]MatchResult, 0, len(vDeps))
+	for _, m := range vDeps {
+		matches = append(matches, m)
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].Score > matches[j].Score
+	})
+	if len(matches) > n {
+		return matches[:n]
+	}
+	return matches
+}
+
+func (s *MemoryStorage) UpdateMatch(viewerID, targetID string, res MatchResult) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.cache[viewerID]; !ok {
+		s.cache[viewerID] = make(map[string]MatchResult)
+	}
+	s.cache[viewerID][targetID] = res
+}
+
+func (s *MemoryStorage) LoadFromFile(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-
 	var matches []persistedMatch
 	if err := json.Unmarshal(data, &matches); err != nil {
 		return err
 	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	count := 0
 	for _, m := range matches {
 		if _, ok := s.cache[m.ViewerID]; !ok {
 			s.cache[m.ViewerID] = make(map[string]MatchResult)
@@ -106,50 +128,145 @@ func (s *Service) LoadFromFile(path string) error {
 			Reason:    m.Reason,
 			Timestamp: time.Now(),
 		}
-		count++
 	}
-	log.Printf("[matcher] loaded %d matches from %s", count, path)
 	return nil
+}
+
+type RedisStorage struct {
+	client *redis.Client
+}
+
+func (s *RedisStorage) GetMatch(viewerID, targetID string) (MatchResult, bool) {
+	ctx := context.Background()
+	val, err := s.client.Get(ctx, fmt.Sprintf("match:%s:%s", viewerID, targetID)).Bytes()
+	if err != nil {
+		return MatchResult{}, false
+	}
+	var m MatchResult
+	json.Unmarshal(val, &m)
+	return m, true
+}
+
+func (s *RedisStorage) GetTopMatches(viewerID string, n int) []MatchResult {
+	ctx := context.Background()
+	// Get IDs from ZSET
+	ids, err := s.client.ZRevRange(ctx, "matches:"+viewerID, 0, int64(n-1)).Result()
+	if err != nil {
+		return []MatchResult{}
+	}
+	out := make([]MatchResult, 0, len(ids))
+	for _, id := range ids {
+		// Parallel fetch or individual (individual for simplicity now)
+		if m, ok := s.GetMatch(viewerID, id); ok {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func (s *RedisStorage) UpdateMatch(viewerID, targetID string, res MatchResult) {
+	ctx := context.Background()
+	data, _ := json.Marshal(res)
+
+	pipe := s.client.Pipeline()
+	// Store details
+	pipe.Set(ctx, fmt.Sprintf("match:%s:%s", viewerID, targetID), data, 0)
+	// Update ranking
+	pipe.ZAdd(ctx, "matches:"+viewerID, redis.Z{Score: res.Score, Member: targetID})
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		log.Printf("[matcher] redis update error: %v", err)
+	}
+}
+
+func (s *RedisStorage) LoadFromFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var matches []persistedMatch
+	if err := json.Unmarshal(data, &matches); err != nil {
+		return err
+	}
+	for _, m := range matches {
+		s.UpdateMatch(m.ViewerID, m.TargetID, MatchResult{
+			TargetID:  m.TargetID,
+			Score:     m.Score,
+			Reason:    m.Reason,
+			Timestamp: time.Now(),
+		})
+	}
+	return nil
+}
+
+type matchingJob struct {
+	viewer    UserInput
+	candidate UserInput
+}
+
+// NewService creates a new matching service with a background worker pool.
+func NewService(apiKey string, redisAddr, redisPwd string, redisDB int) *Service {
+	client := xai.NewClient(apiKey)
+	var storage Storage
+	if redisAddr != "" {
+		storage = &RedisStorage{
+			client: redis.NewClient(&redis.Options{
+				Addr:     redisAddr,
+				Password: redisPwd,
+				DB:       redisDB,
+			}),
+		}
+		log.Printf("[matcher] using redis storage")
+	} else {
+		storage = &MemoryStorage{
+			cache: make(map[string]map[string]MatchResult),
+		}
+		log.Printf("[matcher] using memory storage")
+	}
+
+	s := &Service{
+		aiClient: client,
+		storage:  storage,
+		jobs:     make(chan matchingJob, 1000),
+	}
+	for i := 0; i < 5; i++ {
+		go s.worker(i)
+	}
+	return s
+}
+
+// NewServiceWithClient creates a new matching service with a provided AI client (useful for testing).
+// It defaults to MemoryStorage.
+func NewServiceWithClient(client AIClient) *Service {
+	s := &Service{
+		aiClient: client,
+		storage: &MemoryStorage{
+			cache: make(map[string]map[string]MatchResult),
+		},
+		jobs: make(chan matchingJob, 1000),
+	}
+	for i := 0; i < 5; i++ {
+		go s.worker(i)
+	}
+	return s
+}
+
+// LoadFromFile loads pre-calculated matches from a JSON file.
+func (s *Service) LoadFromFile(path string) error {
+	return s.storage.LoadFromFile(path)
 }
 
 // GetMatch returns a specific match result from cache. Returns empty if not found.
 func (s *Service) GetMatch(viewerID, targetID string) MatchResult {
-	// s.mu.RLock()
-	// defer s.mu.RUnlock()
-
-	if viewerDeps, ok := s.cache[viewerID]; ok {
-		if match, ok := viewerDeps[targetID]; ok {
-			return match
-		}
+	if m, ok := s.storage.GetMatch(viewerID, targetID); ok {
+		return m
 	}
 	return MatchResult{}
 }
 
 // GetTopMatches returns the top N matches for the viewer.
 func (s *Service) GetTopMatches(viewerID string, n int) []MatchResult {
-	// s.mu.RLock()
-	// defer s.mu.RUnlock()
-
-	viewerDeps, ok := s.cache[viewerID]
-	if !ok || len(viewerDeps) == 0 {
-		return []MatchResult{}
-	}
-
-	// copy to slice
-	matches := make([]MatchResult, 0, len(viewerDeps))
-	for _, m := range viewerDeps {
-		matches = append(matches, m)
-	}
-
-	// sort desc
-	sort.Slice(matches, func(i, j int) bool {
-		return matches[i].Score > matches[j].Score
-	})
-
-	if len(matches) > n {
-		return matches[:n]
-	}
-	return matches
+	return s.storage.GetTopMatches(viewerID, n)
 }
 
 // CalculateMatchesAsync queues jobs to calculate matches between the primary user and all candidates.
@@ -184,13 +301,7 @@ func (s *Service) worker(id int) {
 }
 
 func (s *Service) updateCache(viewerID, targetID string, res MatchResult) {
-	// s.mu.Lock()
-	// defer s.mu.Unlock()
-
-	if _, ok := s.cache[viewerID]; !ok {
-		s.cache[viewerID] = make(map[string]MatchResult)
-	}
-	s.cache[viewerID][targetID] = res
+	s.storage.UpdateMatch(viewerID, targetID, res)
 }
 
 func (s *Service) callAI(v, c UserInput) (MatchResult, error) {

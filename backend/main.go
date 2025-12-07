@@ -57,7 +57,7 @@ func main() {
 	srv := newServer(cfg)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
-	log.Printf("starting GlowMeet auth server on %s", addr)
+	log.Printf("starting GlowMeet auth server on %s (redirect_url=%s, cors_origin=%s)", addr, cfg.RedirectURL, cfg.AllowedOrigin)
 	if err := http.ListenAndServe(addr, srv.routes()); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
@@ -105,6 +105,7 @@ func newServer(cfg *Config) *server {
 func (s *server) routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
+	r.Use(requestMetaLogger)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
@@ -144,6 +145,7 @@ func (s *server) handleXLogin(w http.ResponseWriter, r *http.Request) {
 
 	challenge := pkceChallenge(verifier)
 	s.states.put(state, verifier)
+	log.Printf("req_id=%s login issued state=%s host=%s", middleware.GetReqID(r.Context()), state, r.Host)
 
 	authURL := s.oauth.AuthCodeURL(
 		state,
@@ -267,10 +269,32 @@ func getEnv(key, fallback string) string {
 
 func logError(r *http.Request, msg string, err error) {
 	requestID := middleware.GetReqID(r.Context())
-	prefix := fmt.Sprintf("req_id=%s %s %s", requestID, r.Method, r.URL.Path)
+	prefix := fmt.Sprintf("req_id=%s %s %s host=%s", requestID, r.Method, r.URL.Path, r.Host)
 	if err != nil {
 		log.Printf("%s: %s: %v", prefix, msg, err)
 		return
 	}
 	log.Printf("%s: %s", prefix, msg)
+}
+
+func requestMetaLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestID := middleware.GetReqID(r.Context())
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		log.Printf(
+			"req_id=%s inbound scheme=%s host=%s path=%s proto=%s xfp=%s xff=%s ua=%q",
+			requestID,
+			scheme,
+			r.Host,
+			r.URL.Path,
+			r.Proto,
+			r.Header.Get("X-Forwarded-Proto"),
+			r.Header.Get("X-Forwarded-For"),
+			r.UserAgent(),
+		)
+		next.ServeHTTP(w, r)
+	})
 }

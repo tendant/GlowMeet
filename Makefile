@@ -4,4 +4,7 @@ web:
 backend:
 	cd backend && go run main.go
 
-.PHONY: web backend
+backend-watch:
+	cd backend && arelo -p . -- go run main.go
+
+.PHONY: web backend backend-watch

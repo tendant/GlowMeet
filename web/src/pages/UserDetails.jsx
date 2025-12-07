@@ -12,29 +12,43 @@ const UserDetails = () => {
     const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
     useEffect(() => {
+        if (!userId) return;
+
+        let isMounted = true;
+        setLoading(true);
+        setUser(null); // Clear previous user state
+
         const fetchUser = async () => {
             try {
                 const response = await fetch(`${apiBase}/api/users/${userId}`);
                 if (response.ok) {
                     const data = await response.json();
-                    setUser({
-                        ...data,
-                        bgImage: data.bg_image, // Map snake_case to camelCase
-                        profileImage: data.profile_image_url
-                    });
+                    if (isMounted) {
+                        setUser({
+                            ...data,
+                            bgImage: data.bg_image, // Map snake_case to camelCase
+                            profileImage: data.profile_image_url,
+                            tweets: data.tweets || []
+                        });
+                    }
                 } else {
                     console.error("Failed to fetch user details");
+                    // User remains null, will trigger "User not found" view
                 }
             } catch (error) {
                 console.error("Error fetching user details:", error);
             } finally {
-                setLoading(false);
+                if (isMounted) {
+                    setLoading(false);
+                }
             }
         };
 
-        if (userId) {
-            fetchUser();
-        }
+        fetchUser();
+
+        return () => {
+            isMounted = false;
+        };
     }, [userId, apiBase]);
 
     const goBack = () => navigate('/', { state: { active: true } });
@@ -43,6 +57,15 @@ const UserDetails = () => {
         return (
             <div className="user-details-container center-content">
                 <div className="glow-orb" style={{ width: '100px', height: '100px' }}></div>
+            </div>
+        );
+    }
+
+    if (!user) {
+        return (
+            <div className="user-details-container center-content">
+                <div className="error-message">User not found</div>
+                <button onClick={goBack} className="back-btn-error">← Back</button>
             </div>
         );
     }
@@ -59,23 +82,27 @@ const UserDetails = () => {
                 <section className="details-hero">
                     <div className="ai-bg-card">
                         <span className="ai-badge">AI Insight</span>
-                        <img src={user?.bgImage} alt="AI Generated Background" className="bg-image" />
-                        <h1 className="details-username-hero">{user?.username}</h1>
+                        <img src={user.bgImage} alt="AI Generated Background" className="bg-image" />
+                        <h1 className="details-username-hero">{user.username}</h1>
                         <p className="ai-summary">
-                            {user?.summary}
+                            {user.summary}
                         </p>
                     </div>
                 </section>
 
                 <section className="twitter-feed">
-                    {user?.tweets.map((tweet, index) => (
-                        <div key={index} className="feed-item">
-                            <p>{tweet}</p>
-                            <div className="feed-meta">
-                                <span>Twitter Feed {index + 1}</span>
+                    {user.tweets && user.tweets.length > 0 ? (
+                        user.tweets.map((tweet, index) => (
+                            <div key={index} className="feed-item">
+                                <p>{tweet}</p>
+                                <div className="feed-meta">
+                                    <span>Twitter Feed {index + 1}</span>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        ))
+                    ) : (
+                        <p className="no-tweets">No tweets available to analyze.</p>
+                    )}
                 </section>
             </main>
         </div>

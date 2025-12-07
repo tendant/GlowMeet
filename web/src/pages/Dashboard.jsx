@@ -10,7 +10,7 @@ const Dashboard = () => {
     const user = useContext(UserContext);
 
     // Initialize state from navigation state if available (e.g. coming back from UserDetails)
-    const [isActive, setIsActive] = useState(location.state?.active || false);
+    const [isActive, setIsActive] = useState(location.state?.active || true);
     const [matches, setMatches] = useState([]);
     const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 

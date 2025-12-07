@@ -366,6 +366,11 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Populate tweets from separate store
+	if user.ID != "" {
+		user.Tweets = s.tweets.get(user.ID)
+	}
+
 	writeJSON(w, http.StatusOK, user)
 }
 

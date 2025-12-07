@@ -14,11 +14,16 @@ const Dashboard = () => {
     const [matches, setMatches] = useState([]);
     const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
-    // Fetch matches immediately if we're starting in active state
+    // Fetch matches immediately and then every 10 minutes if we're starting in active state
     useEffect(() => {
-        if (isActive && matches.length === 0) {
+        let intervalId;
+        if (isActive) {
             fetchMatches();
+            intervalId = setInterval(fetchMatches, 10 * 1000); // 10 minutes
         }
+        return () => {
+            if (intervalId) clearInterval(intervalId);
+        };
     }, [isActive]);
 
     const fetchMatches = async () => {
@@ -141,6 +146,9 @@ const Dashboard = () => {
                         >
                             <span className="orb-username">
                                 {match.name || match.username}
+                            </span>
+                            <span className="orb-score">
+                                {Math.round(match.matching_score)}%
                             </span>
                         </div>
                     );

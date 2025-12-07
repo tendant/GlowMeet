@@ -6,3 +6,6 @@ Backend: Goland
 Frontend: React RWA App
 Social Login: X (Formerly Twitter)
 
+# User Stories
+- User can sign up with X (Formerly Twitter)
+- User can sign in with X (Formerly Twitter)

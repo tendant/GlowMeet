@@ -95,9 +95,6 @@ const UserDetails = () => {
                         user.tweets.map((tweet, index) => (
                             <div key={index} className="feed-item">
                                 <p>{tweet}</p>
-                                <div className="feed-meta">
-                                    <span>Twitter Feed {index + 1}</span>
-                                </div>
                             </div>
                         ))
                     ) : (

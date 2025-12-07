@@ -924,7 +924,7 @@ Output purely JSON in the following format:
 	// Generate AI Background Image based on summary
 	var imageURL string
 	if result.Summary != "" {
-		imagePrompt := fmt.Sprintf("A creative, artistic background header image for a social media profile of a user described as: %s. Digital art style, vibrant, high quality, landscape aspect ratio, abstract or scenic.", result.Summary)
+		imagePrompt := fmt.Sprintf("A creative, background header image for a social media profile of a user described as: %s. Digital art style, vibrant, high quality, portrait aspect ratio that will fit in a mobile phone, abstract or scenic.", result.Summary)
 		img, err := client.GenerateImage(context.Background(), imagePrompt)
 		if err != nil {
 			log.Printf("xai image generation failed for user=%s: %v", userID, err)

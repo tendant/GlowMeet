@@ -208,23 +208,29 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sessionID, err := randomString(32)
+	if err != nil {
+		logError(r, "failed creating session id", err)
+		writeError(w, http.StatusInternalServerError, "session creation failed")
+		return
+	}
+
 	profile, err := s.fetchXUser(ctx, token.AccessToken)
 	if err != nil {
 		logError(r, "failed fetching X profile after login", err)
-	} else {
+	} else if profile.ID != "" {
+		log.Printf("req_id=%s profile fetched login id=%s username=%s", middleware.GetReqID(r.Context()), profile.ID, profile.Username)
 		s.users.upsert(profile)
 	}
 
-	if profile.ID != "" {
-		s.tokens.upsert(profile.ID, tokenInfo{
-			UserID:       profile.ID,
-			AccessToken:  token.AccessToken,
-			RefreshToken: token.RefreshToken,
-			Expiry:       token.Expiry,
-		})
-	}
+	s.tokens.upsert(sessionID, tokenInfo{
+		UserID:       profile.ID,
+		AccessToken:  token.AccessToken,
+		RefreshToken: token.RefreshToken,
+		Expiry:       token.Expiry,
+	})
 
-	sessionToken, err := s.issueJWT(profile.ID, token.Expiry)
+	sessionToken, err := s.issueJWT(sessionID, token.Expiry)
 	if err != nil {
 		logError(r, "failed creating session token", err)
 		writeError(w, http.StatusInternalServerError, "session creation failed")
@@ -232,14 +238,6 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	secureCookie := strings.HasPrefix(strings.ToLower(s.config.RedirectURL), "https")
-	http.SetCookie(w, &http.Cookie{
-		Name:     "user_id",
-		Value:    profile.ID,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   secureCookie,
-	})
 	http.SetCookie(w, &http.Cookie{
 		Name:     "access_token",
 		Value:    sessionToken,
@@ -250,11 +248,20 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 		Expires:  token.Expiry,
 	})
 
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"session":        sessionID,
+			"user":           profile,
+			"session_expiry": token.Expiry,
+		})
+		return
+	}
+
 	http.Redirect(w, r, s.config.FrontendURL, http.StatusFound)
 }
 
 func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
-	accessToken, profileID := s.resolveAccessToken(r)
+	accessToken, sessionID, _ := s.resolveAccessToken(r)
 	if accessToken == "" {
 		writeError(w, http.StatusUnauthorized, "missing access token")
 		return
@@ -272,9 +279,15 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 
 	if profile.ID != "" {
 		s.users.upsert(profile)
-		if profileID != "" && profile.ID != profileID {
-			log.Printf("req_id=%s user_id cookie mismatch (%s != %s)", middleware.GetReqID(r.Context()), profileID, profile.ID)
+		log.Printf("req_id=%s profile fetched me id=%s username=%s", middleware.GetReqID(r.Context()), profile.ID, profile.Username)
+		existing, _ := s.tokens.get(sessionID)
+		merged := existing
+		merged.UserID = profile.ID
+		merged.AccessToken = accessToken
+		if merged.Expiry.IsZero() || merged.Expiry.Before(time.Now()) {
+			merged.Expiry = time.Now().Add(10 * time.Minute)
 		}
+		s.tokens.upsert(sessionID, merged)
 	}
 
 	writeJSON(w, http.StatusOK, profile)
@@ -517,6 +530,10 @@ func requestMetaLogger(next http.Handler) http.Handler {
 	})
 }
 
+func wantsJSON(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Accept"), "application/json")
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -524,35 +541,35 @@ func min(a, b int) int {
 	return b
 }
 
-func (s *server) resolveAccessToken(r *http.Request) (string, string) {
+func (s *server) resolveAccessToken(r *http.Request) (string, string, string) {
 	sessionCookie, err := r.Cookie("access_token")
 	if err != nil || sessionCookie.Value == "" {
-		return "", ""
+		return "", "", ""
 	}
 
 	claims, err := s.parseJWT(sessionCookie.Value)
 	if err != nil {
 		logError(r, "invalid session token", err)
-		return "", ""
+		return "", "", ""
 	}
 
-	userID := claims.Subject
-	if userID == "" {
-		return "", ""
+	sessionID := claims.Subject
+	if sessionID == "" {
+		return "", "", ""
 	}
 
-	if token, ok := s.tokens.get(userID); ok && token.AccessToken != "" {
+	if token, ok := s.tokens.get(sessionID); ok && token.AccessToken != "" {
 		if token.Expiry.IsZero() || token.Expiry.After(time.Now()) {
-			return token.AccessToken, token.UserID
+			return token.AccessToken, sessionID, token.UserID
 		}
 	}
 
-	return "", ""
+	return "", sessionID, ""
 }
 
-func (s *server) issueJWT(userID string, fallbackExpiry time.Time) (string, error) {
-	if userID == "" {
-		return "", errors.New("missing user id for jwt")
+func (s *server) issueJWT(sessionID string, fallbackExpiry time.Time) (string, error) {
+	if sessionID == "" {
+		return "", errors.New("missing session id for jwt")
 	}
 
 	exp := time.Now().Add(s.config.JWTTTL)
@@ -561,7 +578,7 @@ func (s *server) issueJWT(userID string, fallbackExpiry time.Time) (string, erro
 	}
 
 	claims := jwt.RegisteredClaims{
-		Subject:   userID,
+		Subject:   sessionID,
 		ExpiresAt: jwt.NewNumericDate(exp),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 	}

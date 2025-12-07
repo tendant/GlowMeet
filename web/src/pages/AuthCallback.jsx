@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 const AuthCallback = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
+    const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
     useEffect(() => {
         const exchangeToken = async () => {
@@ -12,7 +13,7 @@ const AuthCallback = () => {
 
             if (code && state) {
                 try {
-                    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/x/callback?code=${code}&state=${state}`);
+                    const response = await fetch(`${apiBase}/auth/x/callback?code=${code}&state=${state}`);
                     const data = await response.json();
 
                     if (response.ok) {

@@ -10,10 +10,11 @@ const XIcon = () => (
 
 const LoginPage = ({ mode = 'login' }) => {
     const navigate = useNavigate();
+    const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
     const handleXAuth = async () => {
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/x/login`);
+            const response = await fetch(`${apiBase}/auth/x/login`);
             const data = await response.json();
 
             if (data.authorization_url) {

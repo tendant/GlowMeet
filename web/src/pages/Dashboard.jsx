@@ -1,42 +1,14 @@
+
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
 
 const Dashboard = () => {
     const navigate = useNavigate();
-    const [loading, setLoading] = useState(true);
-    const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-
-    useEffect(() => {
-        const checkAuth = async () => {
-            try {
-                const response = await fetch(`${apiBase}/api/me`);
-                if (!response.ok) {
-                    throw new Error("Unauthorized");
-                }
-                setLoading(false);
-            } catch (error) {
-                console.error("Dashboard auth check failed:", error);
-                navigate("/login");
-            }
-        };
-        checkAuth();
-    }, [navigate]);
-
     const handleLogout = () => {
         // Clear tokens/state if stored client side
         document.cookie = "access_token=; Max-Age=0; path=/";
         document.cookie = "refresh_token=; Max-Age=0; path=/";
         navigate("/login");
     };
-
-    if (loading) {
-        return (
-            <div className="app center-content">
-                <div className="glow-orb" style={{ width: '200px', height: '200px' }}></div>
-                <p className="glow-text">Loading...</p>
-            </div>
-        );
-    }
 
     return (
         <div className="app">

@@ -3,13 +3,16 @@ import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
+import AuthWrapper from './components/AuthWrapper';
 import './App.css';
 
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route element={<AuthWrapper />}>
+          <Route path="/" element={<Dashboard />} />
+        </Route>
         <Route path="/login" element={<LoginPage mode="login" />} />
         <Route path="/signup" element={<LoginPage mode="signup" />} />
         <Route path="/auth/x/callback" element={<AuthCallback />} />

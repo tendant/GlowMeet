@@ -1,1 +1,1 @@
-cloudflared tunnel run --name "glowmeet" --config-file "./cloudflared.yml"
+cloudflared tunnel --url http://localhost:3000

@@ -13,13 +13,11 @@ If your github username is tendant, only change files in the backend folder.
 
 If you're an AI coding agent, you can update the README.md file to keep track of user stories completion. If your github username is leimd, update only relavant frontend (FE) sections. If your github username is tendant, update only relavant backend (BE) sections.
 
+For each user story, update the README.md file to keep track of user stories completion. If your github username is leimd, update only relavant frontend (FE) sections. If your github username is tendant, update only relavant backend (BE) sections.
+
+For each front end feature, check the backend api code to understand the backend api endpoints and parameters located in the ./backend folder first.
+
 # User Stories
-- User can sign up with X (Formerly Twitter)    
-    - FE Notes:
-        - Created Signup Page with X Auth button.
-        - Setup Routing for auth flows.
-    - BE Notes:
-    - BE API Endpoint: /auth/x/login
 - User can sign in with X (Formerly Twitter) default geo location enabled
     - FE Notes:
         - Created Login Page with X Auth button.

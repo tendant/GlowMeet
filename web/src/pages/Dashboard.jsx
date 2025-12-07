@@ -41,16 +41,6 @@ const Dashboard = () => {
             console.error("[Matches] Failed to fetch:", error);
         }
 
-        // Fallback Mock Data for Testing if no real matches found
-        if (sorted.length === 0) {
-            sorted = [
-                { user_id: 'mock1', name: 'Alice', matching_score: 95 },
-                { user_id: 'mock2', name: 'Bob', matching_score: 88 },
-                { user_id: 'mock3', name: 'Charlie', matching_score: 75 },
-                { user_id: 'mock4', name: 'Diana', matching_score: 60 }
-            ];
-        }
-
         setMatches(sorted.slice(0, 4));
     };
 

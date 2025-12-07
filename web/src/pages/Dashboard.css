@@ -205,3 +205,30 @@
         opacity: 0;
     }
 }
+
+/* Match Orbs - Scattered Around Screen */
+.match-orb {
+    position: absolute;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.5s ease;
+    animation: float-gentle 4s infinite ease-in-out;
+    z-index: 5;
+}
+
+.match-orb:hover {
+    transform: scale(1.15);
+    filter: brightness(1.2);
+}
+
+@keyframes float-gentle {
+
+    0%,
+    100% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(-15px);
+    }
+}

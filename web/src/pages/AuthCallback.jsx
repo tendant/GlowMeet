@@ -4,7 +4,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 const AuthCallback = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
-    const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
     const effectRan = useRef(false);
 
 
@@ -23,7 +22,7 @@ const AuthCallback = () => {
                 effectRan.current = true;
                 console.log("[AuthCallback] Exchanging code for token...");
                 try {
-                    const response = await fetch(`${apiBase}/auth/x/callback?code=${code}&state=${state}`);
+                    const response = await fetch(`/auth/x/callback?code=${code}&state=${state}`);
                     const data = await response.json();
 
                     console.log("[AuthCallback] Backend response:", data);

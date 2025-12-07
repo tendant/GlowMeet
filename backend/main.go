@@ -702,6 +702,7 @@ func (s *server) fetchUserTweets(userID, accessToken string) {
 	if !s.tweets.shouldFetch(userID, 15*time.Minute) {
 		return
 	}
+	log.Printf("fetch tweets start user=%s", userID)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

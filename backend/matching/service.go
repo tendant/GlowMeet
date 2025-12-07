@@ -18,10 +18,11 @@ type AIClient interface {
 
 // MatchResult represents a calculated compatibility score between two users.
 type MatchResult struct {
-	TargetID  string    `json:"target_id"`
-	Score     float64   `json:"score"`
-	Reason    string    `json:"reason"`
-	Timestamp time.Time `json:"timestamp"`
+	TargetID      string    `json:"target_id"`
+	Score         float64   `json:"score"`
+	Reason        string    `json:"reason"`
+	SharedSummary string    `json:"shared_summary"`
+	Timestamp     time.Time `json:"timestamp"`
 }
 
 // UserInput contains the necessary data for AI analysis.
@@ -163,7 +164,11 @@ func (s *Service) callAI(v, c UserInput) (MatchResult, error) {
 User A: %s. Interests: %s. Recent tweets: %s.
 User B: %s. Interests: %s. Recent tweets: %s.
 
-Return JSON: {"score": 0-100, "reason": "1 sentence explanation"}`,
+Return JSON: {
+  "score": 0-100, 
+  "reason": "1 sentence explanation",
+  "shared_summary": "1 engaging sentence summarizing user agreement/commonalities, addressing User A as 'You'. E.g. 'You two both love hiking!'"
+}`,
 		v.Summary, v.Interests, strings.Join(truncate(v.Tweets, 5), " | "),
 		c.Summary, c.Interests, strings.Join(truncate(c.Tweets, 5), " | "))
 
@@ -191,18 +196,20 @@ Return JSON: {"score": 0-100, "reason": "1 sentence explanation"}`,
 	}
 
 	var out struct {
-		Score  float64 `json:"score"`
-		Reason string  `json:"reason"`
+		Score         float64 `json:"score"`
+		Reason        string  `json:"reason"`
+		SharedSummary string  `json:"shared_summary"`
 	}
 	if err := json.Unmarshal([]byte(content), &out); err != nil {
 		return MatchResult{}, err
 	}
 
 	return MatchResult{
-		TargetID:  c.ID,
-		Score:     out.Score,
-		Reason:    out.Reason,
-		Timestamp: time.Now(),
+		TargetID:      c.ID,
+		Score:         out.Score,
+		Reason:        out.Reason,
+		SharedSummary: out.SharedSummary,
+		Timestamp:     time.Now(),
 	}, nil
 }
 

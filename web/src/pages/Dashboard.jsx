@@ -71,190 +71,189 @@ const Dashboard = () => {
 
     const toggleConnection = async () => {
         if (!isActive) {
-            if (!isActive) {
-                // Connecting
-                // Request permission for iOS
-                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    try {
-                        const permission = await DeviceOrientationEvent.requestPermission();
-                        console.log('Orientation permission:', permission);
-                    } catch (e) {
-                        console.warn(e);
-                    }
+            // Connecting
+            // Request permission for iOS
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    console.log('Orientation permission:', permission);
+                } catch (e) {
+                    console.warn(e);
                 }
-                setIsActive(true);
-                await fetchMatches();
-            } else {
-                // Disconnecting
-                setIsActive(false);
-                setMatches([]);
             }
-        };
+            setIsActive(true);
+            await fetchMatches();
+        } else {
+            // Disconnecting
+            setIsActive(false);
+            setMatches([]);
+        }
+    };
 
-        return (
-            <div className="app dashboard-container">
-                <Header user={user} showLogout={true} />
+    return (
+        <div className="app dashboard-container">
+            <Header user={user} showLogout={true} />
 
-                <div className="dashboard-content">
-                    {!isActive && (
-                        <>
-                            <div className="user-display">
-                                <h1 className="large-username">{user?.name || user?.username || "Creator"}</h1>
-                                <p className="connection-status">
-                                    currently unconnected
-                                </p>
-                            </div>
-
-                            <div
-                                className="connection-orb"
-                                onClick={toggleConnection}
-                            >
-                                <span className="orb-cta">
-                                    Connect Now
-                                </span>
-                            </div>
-                        </>
-                    )}
-
-                    {isActive && (
-                        <div className="connected-status">
+            <div className="dashboard-content">
+                {!isActive && (
+                    <>
+                        <div className="user-display">
                             <h1 className="large-username">{user?.name || user?.username || "Creator"}</h1>
-                            <p className="connection-status" style={{ color: '#FF8C00', fontSize: '1.2rem', marginTop: '10px' }}>
-                                connected!
+                            <p className="connection-status">
+                                currently unconnected
                             </p>
                         </div>
-                    )}
 
-                    {isActive && matches.map((match, index) => {
-                        const colors = ['#FF6B6B', '#4ECDC4', '#FFD93D', '#A8E6CF'];
-                        const color = colors[index % colors.length];
+                        <div
+                            className="connection-orb"
+                            onClick={toggleConnection}
+                        >
+                            <span className="orb-cta">
+                                Connect Now
+                            </span>
+                        </div>
+                    </>
+                )}
 
-                        // AR / Relative Positioning Logic
-                        // 1. Calculate Bearing
-                        const myLat = user?.lat;
-                        const myLong = user?.long;
-                        const targetLat = match.lat;
-                        const targetLong = match.long;
+                {isActive && (
+                    <div className="connected-status">
+                        <h1 className="large-username">{user?.name || user?.username || "Creator"}</h1>
+                        <p className="connection-status" style={{ color: '#FF8C00', fontSize: '1.2rem', marginTop: '10px' }}>
+                            connected!
+                        </p>
+                    </div>
+                )}
 
-                        let leftPos = '50%';
-                        let topPos = '50%';
-                        let isVisible = true;
+                {isActive && matches.map((match, index) => {
+                    const colors = ['#FF6B6B', '#4ECDC4', '#FFD93D', '#A8E6CF'];
+                    const color = colors[index % colors.length];
 
-                        if (myLat && myLong && targetLat && targetLong) {
-                            const toRad = (deg) => deg * Math.PI / 180;
-                            const toDeg = (rad) => rad * 180 / Math.PI;
+                    // AR / Relative Positioning Logic
+                    // 1. Calculate Bearing
+                    const myLat = user?.lat;
+                    const myLong = user?.long;
+                    const targetLat = match.lat;
+                    const targetLong = match.long;
 
-                            const phi1 = toRad(myLat);
-                            const phi2 = toRad(targetLat);
-                            const dLam = toRad(targetLong - myLong);
+                    let leftPos = '50%';
+                    let topPos = '50%';
+                    let isVisible = true;
 
-                            const y = Math.sin(dLam) * Math.cos(phi2);
-                            const x = Math.cos(phi1) * Math.sin(phi2) -
-                                Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLam);
+                    if (myLat && myLong && targetLat && targetLong) {
+                        const toRad = (deg) => deg * Math.PI / 180;
+                        const toDeg = (rad) => rad * 180 / Math.PI;
 
-                            let bearing = toDeg(Math.atan2(y, x));
-                            bearing = (bearing + 360) % 360; // Normalize to 0-360
+                        const phi1 = toRad(myLat);
+                        const phi2 = toRad(targetLat);
+                        const dLam = toRad(targetLong - myLong);
 
-                            // 2. Compare with device azimuth (alpha)
-                            // alpha is where phone is pointing (accumulated from state)
-                            // If phone points 0 (N), and bearing is 90 (E), delta is +90 (Right of screen)
-                            let delta = bearing - alpha;
+                        const y = Math.sin(dLam) * Math.cos(phi2);
+                        const x = Math.cos(phi1) * Math.sin(phi2) -
+                            Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLam);
 
-                            // Shortest path scaling
-                            if (delta < -180) delta += 360;
-                            if (delta > 180) delta -= 360;
+                        let bearing = toDeg(Math.atan2(y, x));
+                        bearing = (bearing + 360) % 360; // Normalize to 0-360
 
-                            // 3. Map to screen
-                            // Field of View (FOV) = 90 degrees?
-                            // Center (0 delta) = 50% left
-                            // -45 deg = 0% left
-                            // +45 deg = 100% left
-                            const fov = 100; // slightly wider than 90
-                            const screenX = 50 + (delta / (fov / 2)) * 50;
+                        // 2. Compare with device azimuth (alpha)
+                        // alpha is where phone is pointing (accumulated from state)
+                        // If phone points 0 (N), and bearing is 90 (E), delta is +90 (Right of screen)
+                        let delta = bearing - alpha;
 
-                            leftPos = `${screenX}%`;
+                        // Shortest path scaling
+                        if (delta < -180) delta += 360;
+                        if (delta > 180) delta -= 360;
 
-                            // Fade out if out of view
-                            if (screenX < -10 || screenX > 110) {
-                                isVisible = false;
-                            }
+                        // 3. Map to screen
+                        // Field of View (FOV) = 90 degrees?
+                        // Center (0 delta) = 50% left
+                        // -45 deg = 0% left
+                        // +45 deg = 100% left
+                        const fov = 100; // slightly wider than 90
+                        const screenX = 50 + (delta / (fov / 2)) * 50;
 
-                            // Distance affects Top (Perspective)
-                            // Closer = Lower (bottom of screen), Further = Higher (closer to horizon)
-                            // distance_ft mapping:
-                            // 0 ft = 80% top (very close)
-                            // 10000 miles... map logs?
-                            // Simple linear clamp for demo:
-                            // Max view distance 5000 miles?
-                            // Just somewhat random Y based on index if no distance logic perfectly fits screen
-                            // But let's try mapping inverse distance to Y.
-                            // Actually, simplified: keep Y spread to avoid overlap, but X is strictly directional.
-                            // Or use distance for scale mainly.
-                            topPos = `${30 + (index * 10)}%`; // Keep Y separate to prevent overlapping text
-                        } else {
-                            // Fallback if no location data
-                            const positions = [
-                                { top: '35%', left: '15%' },
-                                { top: '45%', right: '20%' },
-                                { bottom: '20%', left: '25%' },
-                                { bottom: '25%', right: '15%' }
-                            ];
-                            const pos = positions[index % positions.length];
-                            if (pos.left) leftPos = pos.left;
-                            if (pos.right) leftPos = `calc(100% - ${pos.right})`;
-                            if (pos.top) topPos = pos.top;
-                            if (pos.bottom) topPos = `calc(100% - ${pos.bottom})`;
+                        leftPos = `${screenX}%`;
+
+                        // Fade out if out of view
+                        if (screenX < -10 || screenX > 110) {
+                            isVisible = false;
                         }
 
-                        const scoreNormalized = Math.min(match.matching_score / 100, 1);
-                        const size = 60 + (scoreNormalized * 140);
-                        const brightness = 0.4 + (scoreNormalized * 0.6);
+                        // Distance affects Top (Perspective)
+                        // Closer = Lower (bottom of screen), Further = Higher (closer to horizon)
+                        // distance_ft mapping:
+                        // 0 ft = 80% top (very close)
+                        // 10000 miles... map logs?
+                        // Simple linear clamp for demo:
+                        // Max view distance 5000 miles?
+                        // Just somewhat random Y based on index if no distance logic perfectly fits screen
+                        // But let's try mapping inverse distance to Y.
+                        // Actually, simplified: keep Y spread to avoid overlap, but X is strictly directional.
+                        // Or use distance for scale mainly.
+                        topPos = `${30 + (index * 10)}%`; // Keep Y separate to prevent overlapping text
+                    } else {
+                        // Fallback if no location data
+                        const positions = [
+                            { top: '35%', left: '15%' },
+                            { top: '45%', right: '20%' },
+                            { bottom: '20%', left: '25%' },
+                            { bottom: '25%', right: '15%' }
+                        ];
+                        const pos = positions[index % positions.length];
+                        if (pos.left) leftPos = pos.left;
+                        if (pos.right) leftPos = `calc(100% - ${pos.right})`;
+                        if (pos.top) topPos = pos.top;
+                        if (pos.bottom) topPos = `calc(100% - ${pos.bottom})`;
+                    }
 
-                        if (!isVisible) return null;
+                    const scoreNormalized = Math.min(match.matching_score / 100, 1);
+                    const size = 60 + (scoreNormalized * 140);
+                    const brightness = 0.4 + (scoreNormalized * 0.6);
 
-                        return (
-                            <div
-                                key={match.user_id}
-                                className="match-orb"
-                                onClick={() => navigate(`/user/${match.user_id}`)}
-                                style={{
-                                    left: leftPos,
-                                    top: topPos,
-                                    position: 'absolute',
-                                    transform: 'translate(-50%, -50%)', // Center on coordinate
-                                    width: `${size}px`,
-                                    height: `${size}px`,
-                                    opacity: brightness,
-                                    background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9) 0%, ${color} 25%, ${color}ee 60%, ${color}99 100%)`,
-                                    boxShadow: `
+                    if (!isVisible) return null;
+
+                    return (
+                        <div
+                            key={match.user_id}
+                            className="match-orb"
+                            onClick={() => navigate(`/user/${match.user_id}`)}
+                            style={{
+                                left: leftPos,
+                                top: topPos,
+                                position: 'absolute',
+                                transform: 'translate(-50%, -50%)', // Center on coordinate
+                                width: `${size}px`,
+                                height: `${size}px`,
+                                opacity: brightness,
+                                background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9) 0%, ${color} 25%, ${color}ee 60%, ${color}99 100%)`,
+                                boxShadow: `
                                     0 0 20px ${color},
                                     0 0 60px ${color}aa,
                                     0 0 100px ${color}66
                                 `,
-                                    transition: 'left 0.2s ease-out, top 0.5s ease-out', // Smooth movement
-                                    zIndex: Math.round(scoreNormalized * 10)
-                                }}
-                                title={match.name || match.username}
-                            >
-                                <span className="orb-username">
-                                    {match.name || match.username}
+                                transition: 'left 0.2s ease-out, top 0.5s ease-out', // Smooth movement
+                                zIndex: Math.round(scoreNormalized * 10)
+                            }}
+                            title={match.name || match.username}
+                        >
+                            <span className="orb-username">
+                                {match.name || match.username}
+                            </span>
+                            <span className="orb-score">
+                                {Math.round(match.matching_score)}%
+                            </span>
+                            {typeof match.distance_ft === 'number' && (
+                                <span className="orb-distance" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
+                                    {Math.round(match.distance_ft).toLocaleString()} ft
                                 </span>
-                                <span className="orb-score">
-                                    {Math.round(match.matching_score)}%
-                                </span>
-                                {typeof match.distance_ft === 'number' && (
-                                    <span className="orb-distance" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
-                                        {Math.round(match.distance_ft).toLocaleString()} ft
-                                    </span>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-
-                <div className="glow-orb" style={{ top: '50%', width: '800px', height: '800px', opacity: 0.2 }}></div>
+                            )}
+                        </div>
+                    );
+                })}
             </div>
-        );
-    };
 
-    export default Dashboard;
+            <div className="glow-orb" style={{ top: '50%', width: '800px', height: '800px', opacity: 0.2 }}></div>
+        </div>
+    );
+};
+
+export default Dashboard;

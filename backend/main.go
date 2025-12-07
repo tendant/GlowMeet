@@ -320,6 +320,7 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 		Summary       string   `json:"summary,omitempty"`
 		Description   string   `json:"description,omitempty"`
 		Tweets        []string `json:"tweets,omitempty"`
+		Interests     string   `json:"interests,omitempty"`
 	}
 
 	out := make([]userSummary, 0, len(users))
@@ -335,6 +336,7 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 			MatchingScore: u.MatchingScore,
 			Summary:       u.Summary,
 			Description:   u.Description,
+			Interests:     u.Interests,
 			// Return a sample tweet text to give clients something to show.
 			// Full list available via /api/me.
 			// Avoid large payloads by sending only the first tweet text if present.
@@ -382,8 +384,9 @@ func (s *server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Lat  float64 `json:"lat"`
-		Long float64 `json:"long"`
+		Lat       float64 `json:"lat"`
+		Long      float64 `json:"long"`
+		Interests string  `json:"interests"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -391,8 +394,8 @@ func (s *server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if body.Lat == 0 && body.Long == 0 {
-		writeError(w, http.StatusBadRequest, "lat/long required")
+	if len(body.Interests) > 512 {
+		writeError(w, http.StatusBadRequest, "interests too long (max 512 chars)")
 		return
 	}
 
@@ -402,14 +405,26 @@ func (s *server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// store location on user profile in-memory if we have it
-	if existing.UserID != "" {
-		s.users.updateLocation(existing.UserID, body.Lat, body.Long)
+	if existing.UserID == "" {
+		writeError(w, http.StatusNotFound, "user not cached")
+		return
 	}
 
+	s.users.updateProfile(existing.UserID, func(u userProfile) userProfile {
+		if body.Lat != 0 || body.Long != 0 {
+			u.Lat = body.Lat
+			u.Long = body.Long
+		}
+		if body.Interests != "" {
+			u.Interests = body.Interests
+		}
+		return u
+	})
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"lat":  body.Lat,
-		"long": body.Long,
+		"lat":       body.Lat,
+		"long":      body.Long,
+		"interests": body.Interests,
 	})
 }
 
@@ -477,6 +492,7 @@ type userProfile struct {
 	Summary         string   `json:"summary,omitempty"`
 	BgImage         string   `json:"bg_image,omitempty"`
 	Tweets          []string `json:"tweets,omitempty"`
+	Interests       string   `json:"interests,omitempty"`
 	MatchingScore   float64  `json:"matching_score,omitempty"`
 	Description     string   `json:"description,omitempty"`
 }
@@ -606,6 +622,20 @@ func (s *userStore) get(userID string) (userProfile, bool) {
 	defer s.mu.Unlock()
 	user, ok := s.data[userID]
 	return user, ok
+}
+
+func (s *userStore) updateProfile(userID string, mutate func(userProfile) userProfile) {
+	if mutate == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	user, ok := s.data[userID]
+	if !ok {
+		return
+	}
+	user = mutate(user)
+	s.data[userID] = user
 }
 
 func defaultScore(id string) float64 {

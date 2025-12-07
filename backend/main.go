@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	"golang.org/x/oauth2"
 )
@@ -30,6 +32,8 @@ type Config struct {
 	RedirectURL   string
 	AllowedOrigin string
 	FrontendURL   string
+	JWTSecret     string
+	JWTTTL        time.Duration
 }
 
 type stateEntry struct {
@@ -48,6 +52,7 @@ type server struct {
 	oauth  *oauth2.Config
 	states *stateStore
 	users  *userStore
+	tokens *tokenStore
 }
 
 func main() {
@@ -75,6 +80,8 @@ func loadConfig() (*Config, error) {
 		RedirectURL:   os.Getenv("X_REDIRECT_URL"),
 		AllowedOrigin: getEnv("CORS_ORIGIN", "*"),
 		FrontendURL:   getEnv("FRONTEND_URL", "http://localhost:3000"),
+		JWTSecret:     os.Getenv("APP_JWT_SECRET"),
+		JWTTTL:        getEnvDuration("APP_JWT_TTL", 24*time.Hour),
 	}
 
 	if cfg.ClientID == "" {
@@ -85,6 +92,9 @@ func loadConfig() (*Config, error) {
 	}
 	if cfg.RedirectURL == "" {
 		return nil, errors.New("missing X_REDIRECT_URL")
+	}
+	if cfg.JWTSecret == "" {
+		return nil, errors.New("missing APP_JWT_SECRET")
 	}
 
 	return cfg, nil
@@ -105,6 +115,7 @@ func newServer(cfg *Config) *server {
 		},
 		states: newStateStore(10 * time.Minute),
 		users:  newUserStore(50),
+		tokens: newTokenStore(200),
 	}
 }
 
@@ -204,10 +215,34 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 		s.users.upsert(profile)
 	}
 
+	if profile.ID != "" {
+		s.tokens.upsert(profile.ID, tokenInfo{
+			UserID:       profile.ID,
+			AccessToken:  token.AccessToken,
+			RefreshToken: token.RefreshToken,
+			Expiry:       token.Expiry,
+		})
+	}
+
+	sessionToken, err := s.issueJWT(profile.ID, token.Expiry)
+	if err != nil {
+		logError(r, "failed creating session token", err)
+		writeError(w, http.StatusInternalServerError, "session creation failed")
+		return
+	}
+
 	secureCookie := strings.HasPrefix(strings.ToLower(s.config.RedirectURL), "https")
 	http.SetCookie(w, &http.Cookie{
+		Name:     "user_id",
+		Value:    profile.ID,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   secureCookie,
+	})
+	http.SetCookie(w, &http.Cookie{
 		Name:     "access_token",
-		Value:    token.AccessToken,
+		Value:    sessionToken,
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   secureCookie,
@@ -215,23 +250,12 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 		Expires:  token.Expiry,
 	})
 
-	if token.RefreshToken != "" {
-		http.SetCookie(w, &http.Cookie{
-			Name:     "refresh_token",
-			Value:    token.RefreshToken,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   secureCookie,
-			SameSite: http.SameSiteLaxMode,
-		})
-	}
-
 	http.Redirect(w, r, s.config.FrontendURL, http.StatusFound)
 }
 
 func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
-	tokenCookie, err := r.Cookie("access_token")
-	if err != nil || tokenCookie.Value == "" {
+	accessToken, profileID := s.resolveAccessToken(r)
+	if accessToken == "" {
 		writeError(w, http.StatusUnauthorized, "missing access token")
 		return
 	}
@@ -239,14 +263,20 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	profile, err := s.fetchXUser(ctx, tokenCookie.Value)
+	profile, err := s.fetchXUser(ctx, accessToken)
 	if err != nil {
 		logError(r, "failed to fetch profile", err)
 		writeError(w, http.StatusBadGateway, "failed to fetch profile")
 		return
 	}
 
-	s.users.upsert(profile)
+	if profile.ID != "" {
+		s.users.upsert(profile)
+		if profileID != "" && profile.ID != profileID {
+			log.Printf("req_id=%s user_id cookie mismatch (%s != %s)", middleware.GetReqID(r.Context()), profileID, profile.ID)
+		}
+	}
+
 	writeJSON(w, http.StatusOK, profile)
 }
 
@@ -322,10 +352,30 @@ type userStore struct {
 	data map[string]userProfile
 }
 
+type tokenInfo struct {
+	UserID       string
+	AccessToken  string
+	RefreshToken string
+	Expiry       time.Time
+}
+
+type tokenStore struct {
+	mu   sync.Mutex
+	lim  int
+	data map[string]tokenInfo
+}
+
 func newUserStore(limit int) *userStore {
 	return &userStore{
 		lim:  limit,
 		data: make(map[string]userProfile),
+	}
+}
+
+func newTokenStore(limit int) *tokenStore {
+	return &tokenStore{
+		lim:  limit,
+		data: make(map[string]tokenInfo),
 	}
 }
 
@@ -355,6 +405,30 @@ func (s *userStore) top(n int) []userProfile {
 		}
 	}
 	return result
+}
+
+func (s *tokenStore) upsert(sessionID string, token tokenInfo) {
+	if sessionID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data[sessionID] = token
+	if len(s.data) > s.lim {
+		for k := range s.data {
+			delete(s.data, k)
+			if len(s.data) <= s.lim {
+				break
+			}
+		}
+	}
+}
+
+func (s *tokenStore) get(sessionID string) (tokenInfo, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	token, ok := s.data[sessionID]
+	return token, ok
 }
 
 func (s *server) fetchXUser(ctx context.Context, accessToken string) (userProfile, error) {
@@ -448,4 +522,78 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (s *server) resolveAccessToken(r *http.Request) (string, string) {
+	sessionCookie, err := r.Cookie("access_token")
+	if err != nil || sessionCookie.Value == "" {
+		return "", ""
+	}
+
+	claims, err := s.parseJWT(sessionCookie.Value)
+	if err != nil {
+		logError(r, "invalid session token", err)
+		return "", ""
+	}
+
+	userID := claims.Subject
+	if userID == "" {
+		return "", ""
+	}
+
+	if token, ok := s.tokens.get(userID); ok && token.AccessToken != "" {
+		if token.Expiry.IsZero() || token.Expiry.After(time.Now()) {
+			return token.AccessToken, token.UserID
+		}
+	}
+
+	return "", ""
+}
+
+func (s *server) issueJWT(userID string, fallbackExpiry time.Time) (string, error) {
+	if userID == "" {
+		return "", errors.New("missing user id for jwt")
+	}
+
+	exp := time.Now().Add(s.config.JWTTTL)
+	if !fallbackExpiry.IsZero() && fallbackExpiry.Before(exp) {
+		exp = fallbackExpiry
+	}
+
+	claims := jwt.RegisteredClaims{
+		Subject:   userID,
+		ExpiresAt: jwt.NewNumericDate(exp),
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(s.config.JWTSecret))
+}
+
+func (s *server) parseJWT(tokenString string) (*jwt.RegisteredClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(s.config.JWTSecret), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if claims, ok := token.Claims.(*jwt.RegisteredClaims); ok && token.Valid {
+		return claims, nil
+	}
+	return nil, errors.New("invalid token claims")
+}
+
+func getEnvDuration(key string, fallback time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if parsed, err := time.ParseDuration(v); err == nil {
+			return parsed
+		}
+		if hours, err := strconv.Atoi(v); err == nil {
+			return time.Duration(hours) * time.Hour
+		}
+	}
+	return fallback
 }

@@ -119,6 +119,9 @@ func newServer(cfg *Config) *server {
 		tokens: newTokenStore(200),
 	}
 
+	if err := s.users.loadFromFile("data/users.json"); err != nil {
+		log.Printf("warning: could not load fake users: %v", err)
+	}
 	s.seedUsers()
 	return s
 }
@@ -150,6 +153,7 @@ func (s *server) routes() http.Handler {
 		r.Get("/me", s.handleMe)
 		r.Post("/me", s.handleUpdateMe)
 		r.Get("/users", s.handleUsers)
+		r.Get("/users/{id}", s.handleUser)
 	})
 
 	return r
@@ -326,6 +330,22 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "id")
+	if userID == "" {
+		writeError(w, http.StatusBadRequest, "missing user id")
+		return
+	}
+
+	user, ok := s.users.get(userID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, user)
+}
+
 func (s *server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	accessToken, sessionID, _ := s.resolveAccessToken(r)
 	if accessToken == "" {
@@ -426,6 +446,9 @@ type userProfile struct {
 	ProfileImageURL string  `json:"profile_image_url,omitempty"`
 	Lat             float64 `json:"lat,omitempty"`
 	Long            float64 `json:"long,omitempty"`
+	Summary         string  `json:"summary,omitempty"`
+	BgImage         string  `json:"bg_image,omitempty"`
+	Tweets          []string `json:"tweets,omitempty"`
 	MatchingScore   float64 `json:"matching_score,omitempty"`
 	Description     string  `json:"description,omitempty"`
 }
@@ -482,6 +505,24 @@ func (s *userStore) upsert(u userProfile) {
 			}
 		}
 	}
+}
+
+func (s *userStore) loadFromFile(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	var users []userProfile
+	if err := json.NewDecoder(f).Decode(&users); err != nil {
+		return err
+	}
+
+	for _, u := range users {
+		s.upsert(u)
+	}
+	return nil
 }
 
 func (s *userStore) top(n int) []userProfile {

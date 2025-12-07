@@ -18,6 +18,8 @@ If you're an AI coding agent, you can update the README.md file to keep track of
 - User can sign in with X (Formerly Twitter)
 - As a user, the app can fetch all users within 100 meters, and send to the backend.
     - FE Notes:
+        - Initialized React (Vite) project.
+        - Implemented Landing Page with modern design (Dark theme, Glassmorphism).
     - BE Notes:
     - BE API Endpoint:
 

@@ -154,6 +154,7 @@ func (s *server) routes() http.Handler {
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/me", s.handleMe)
 		r.Post("/me", s.handleUpdateMe)
+		r.Post("/me/location", s.handleUpdateLocation)
 		r.Get("/users", s.handleUsers)
 		r.Get("/users/{id}", s.handleUser)
 	})
@@ -411,10 +412,6 @@ func (s *server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.users.updateProfile(existing.UserID, func(u userProfile) userProfile {
-		if body.Lat != 0 || body.Long != 0 {
-			u.Lat = body.Lat
-			u.Long = body.Long
-		}
 		if body.Interests != "" {
 			u.Interests = body.Interests
 		}
@@ -422,9 +419,41 @@ func (s *server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"lat":       body.Lat,
-		"long":      body.Long,
 		"interests": body.Interests,
+	})
+}
+
+func (s *server) handleUpdateLocation(w http.ResponseWriter, r *http.Request) {
+	_, sessionID, _ := s.resolveAccessToken(r)
+	if sessionID == "" {
+		writeError(w, http.StatusUnauthorized, "missing access token")
+		return
+	}
+
+	var body struct {
+		Lat  float64 `json:"lat"`
+		Long float64 `json:"long"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	if body.Lat == 0 && body.Long == 0 {
+		writeError(w, http.StatusBadRequest, "lat/long required")
+		return
+	}
+
+	existing, ok := s.tokens.get(sessionID)
+	if !ok || existing.AccessToken == "" || existing.UserID == "" {
+		writeError(w, http.StatusUnauthorized, "session not found")
+		return
+	}
+
+	s.users.updateLocation(existing.UserID, body.Lat, body.Long)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"lat":  body.Lat,
+		"long": body.Long,
 	})
 }
 

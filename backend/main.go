@@ -262,33 +262,30 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
-	accessToken, sessionID, _ := s.resolveAccessToken(r)
-	if accessToken == "" {
+	_, sessionID, userID := s.resolveAccessToken(r)
+	if sessionID == "" {
 		writeError(w, http.StatusUnauthorized, "missing access token")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	defer cancel()
-
-	profile, err := s.fetchXUser(ctx, accessToken)
-	if err != nil {
-		logError(r, "failed to fetch profile", err)
-		writeError(w, http.StatusBadGateway, "failed to fetch profile")
+	token, ok := s.tokens.get(sessionID)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "session not found")
 		return
 	}
 
-	if profile.ID != "" {
-		s.users.upsert(profile)
-		log.Printf("req_id=%s profile fetched me id=%s username=%s", middleware.GetReqID(r.Context()), profile.ID, profile.Username)
-		existing, _ := s.tokens.get(sessionID)
-		merged := existing
-		merged.UserID = profile.ID
-		merged.AccessToken = accessToken
-		if merged.Expiry.IsZero() || merged.Expiry.Before(time.Now()) {
-			merged.Expiry = time.Now().Add(10 * time.Minute)
-		}
-		s.tokens.upsert(sessionID, merged)
+	if userID == "" {
+		userID = token.UserID
+	}
+	if userID == "" {
+		writeError(w, http.StatusNotFound, "user not cached")
+		return
+	}
+
+	profile, ok := s.users.get(userID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "user not cached")
+		return
 	}
 
 	writeJSON(w, http.StatusOK, profile)
@@ -470,6 +467,13 @@ func (s *userStore) updateLocation(userID string, lat, long float64) {
 		user.Long = long
 		s.data[userID] = user
 	}
+}
+
+func (s *userStore) get(userID string) (userProfile, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	user, ok := s.data[userID]
+	return user, ok
 }
 
 func (s *tokenStore) upsert(sessionID string, token tokenInfo) {

@@ -854,13 +854,24 @@ func (s *server) callXAIAnalysis(userID string, tweets []string) {
 	}
 	contextText := strings.Join(tweets[:limit], "\n- ")
 
-	prompt := fmt.Sprintf(`Analyze the following tweets from a user:
+	// Fetch user interests
+	var interests string
+	if user, ok := s.users.get(userID); ok {
+		interests = user.Interests
+	}
+
+	interestsContext := ""
+	if interests != "" {
+		interestsContext = fmt.Sprintf("\nThe user also has these stated interests: %s", interests)
+	}
+
+	prompt := fmt.Sprintf(`Analyze the following tweets from a user:%s
 - %s
 
 Generate a short 2-sentence summary of who they are. 
-Also provide a 'matching score' from 0-100 indicating how socially engaging they seem based on their content. 
+Also provide a 'matching score' from 0-100 indicating how socially engaging they seem based on their content and interests. 
 Output purely JSON in the following format:
-{"summary": "...", "score": 85.5}`, contextText)
+{"summary": "...", "score": 85.5}`, interestsContext, contextText)
 
 	// Using CreateChatCompletion as we want JSON output which is easier with standard chat.
 	// Ideally we'd use Structured Output if available, but here we'll parse the string.

@@ -15,7 +15,12 @@ const Header = ({ user, showLogout = true }) => {
             <div className="header-left">
                 <div className="logo glow-text">GlowMeet</div>
                 {user && (
-                    <div className="user-greeting">
+                    <div
+                        className="user-greeting"
+                        onClick={() => navigate('/profile')}
+                        style={{ cursor: 'pointer' }}
+                        title="Edit Profile"
+                    >
                         Hello, {user.name || user.username || "Creator"}
                     </div>
                 )}

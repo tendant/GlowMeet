@@ -34,7 +34,18 @@ If you're an AI coding agent, you can update the README.md file to keep track of
     - BE Notes:
     - BE API Endpoint:
 - Fetch X feed of every user and myself, generate 2 pairwise matching scores (between 0 to 100) with AI. One "Business" match score and one "Dating" match score. For Dating match score, the gender <> gender interested in must match. 
+    - FE Notes:
+    - BE Notes:
+    - BE API Endpoint:
 - Shortlist users (max 3) with either scores above 80
-- 
+    - FE Notes:
+    - BE Notes:
+    - BE API Endpoint:
+
+
+- Next requirement
+    - FE Notes:
+    - BE Notes:
+    - BE API Endpoint:
 
 

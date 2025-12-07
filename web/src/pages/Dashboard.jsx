@@ -87,9 +87,10 @@ const Dashboard = () => {
                 {isActive && (
                     <div className="connected-status">
                         <h1 className="large-username">{user?.name || user?.username || "Creator"}</h1>
-                        <p className="connection-status" style={{ color: '#FF8C00', fontSize: '1.2rem', marginTop: '10px' }}>
-                            connected!
-                        </p>
+                        <div className="status-badge">
+                            <span className="status-text">Connected</span>
+                            <span className="status-dot"></span>
+                        </div>
                     </div>
                 )}
 

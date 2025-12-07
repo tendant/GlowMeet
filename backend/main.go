@@ -597,11 +597,14 @@ func (s *userStore) top(n int) []userProfile {
 	return result
 }
 
-func (s *userStore) updateXAIData(userID, summary string, score float64) {
+func (s *userStore) updateXAIData(userID, summary, imageURL string, score float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if user, ok := s.data[userID]; ok {
 		user.Summary = summary
+		if imageURL != "" {
+			user.BgImage = imageURL
+		}
 		user.MatchingScore = score
 		s.data[userID] = user
 	}
@@ -867,7 +870,21 @@ Output purely JSON in the following format:
 	}
 
 	log.Printf("xai analysis complete for user=%s: score=%.1f", userID, result.Score)
-	s.users.updateXAIData(userID, result.Summary, result.Score)
+
+	// Generate AI Background Image based on summary
+	var imageURL string
+	if result.Summary != "" {
+		imagePrompt := fmt.Sprintf("A creative, artistic background header image for a social media profile of a user described as: %s. Digital art style, vibrant, high quality, landscape aspect ratio, abstract or scenic.", result.Summary)
+		img, err := client.GenerateImage(context.Background(), imagePrompt)
+		if err != nil {
+			log.Printf("xai image generation failed for user=%s: %v", userID, err)
+		} else {
+			imageURL = img
+			log.Printf("xai image generated for user=%s: %s", userID, imageURL)
+		}
+	}
+
+	s.users.updateXAIData(userID, result.Summary, imageURL, result.Score)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {

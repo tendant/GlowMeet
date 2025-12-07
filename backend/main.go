@@ -191,7 +191,7 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 
 	secureCookie := strings.HasPrefix(strings.ToLower(s.config.RedirectURL), "https")
 	http.SetCookie(w, &http.Cookie{
-		Name:     "gm_access_token",
+		Name:     "access_token",
 		Value:    token.AccessToken,
 		Path:     "/",
 		HttpOnly: true,
@@ -202,7 +202,7 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 
 	if token.RefreshToken != "" {
 		http.SetCookie(w, &http.Cookie{
-			Name:     "gm_refresh_token",
+			Name:     "refresh_token",
 			Value:    token.RefreshToken,
 			Path:     "/",
 			HttpOnly: true,

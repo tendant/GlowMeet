@@ -214,38 +214,53 @@ const Dashboard = () => {
                     return (
                         <div
                             key={match.user_id}
-                            className="match-orb"
-                            onClick={() => navigate(`/user/${match.user_id}`)}
                             style={{
                                 left: leftPos,
                                 top: topPos,
                                 position: 'absolute',
-                                transform: 'translate(-50%, -50%)', // Center on coordinate
+                                transform: 'translate(-50%, -50%)', // Center the container on the coordinate
                                 width: `${size}px`,
                                 height: `${size}px`,
-                                opacity: brightness,
-                                background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9) 0%, ${color} 25%, ${color}ee 60%, ${color}99 100%)`,
-                                boxShadow: `
+                                zIndex: Math.round(scoreNormalized * 10),
+                                transition: 'left 0.2s ease-out, top 0.5s ease-out', // Smooth movement of specific position
+                                pointerEvents: 'none' // Allow clicks to pass through container if needed, but inner needs pointer-events: auto
+                            }}
+                        >
+                            <div
+                                className="match-orb"
+                                onClick={() => navigate(`/user/${match.user_id}`)}
+                                title={match.name || match.username}
+                                style={{
+                                    position: 'relative', // Override CSS absolute
+                                    width: '100%',
+                                    height: '100%',
+                                    opacity: brightness,
+                                    background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9) 0%, ${color} 25%, ${color}ee 60%, ${color}99 100%)`,
+                                    boxShadow: `
                                     0 0 20px ${color},
                                     0 0 60px ${color}aa,
                                     0 0 100px ${color}66
                                 `,
-                                transition: 'left 0.2s ease-out, top 0.5s ease-out', // Smooth movement
-                                zIndex: Math.round(scoreNormalized * 10)
-                            }}
-                            title={match.name || match.username}
-                        >
-                            <span className="orb-username">
-                                {match.name || match.username}
-                            </span>
-                            <span className="orb-score">
-                                {Math.round(match.matching_score)}%
-                            </span>
-                            {typeof match.distance_ft === 'number' && (
-                                <span className="orb-distance" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
-                                    {Math.round(match.distance_ft).toLocaleString()} ft
+                                    pointerEvents: 'auto'
+                                }}
+                            >
+                                <span className="orb-username">
+                                    {match.name || match.username}
                                 </span>
-                            )}
+                                <span className="orb-score">
+                                    {Math.round(match.matching_score)}%
+                                </span>
+                                {typeof match.match_info?.shared_summary === 'string' ? (
+                                    <span className="orb-distance" style={{ fontSize: '0.6rem', marginTop: '2px', color: 'white', maxWidth: '80%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {/* Optional: Show mini summary? Maybe too crowded. Stick to distance for now or both. */}
+                                    </span>
+                                ) : null}
+                                {typeof match.distance_ft === 'number' && (
+                                    <span className="orb-distance" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
+                                        {Math.round(match.distance_ft).toLocaleString()} ft
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     );
                 })}

@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage';
 import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
 import AuthWrapper from './components/AuthWrapper';
+import APIExplorer from './pages/APIExplorer';
 import './App.css';
 
 function App() {
@@ -12,6 +13,7 @@ function App() {
       <Routes>
         <Route element={<AuthWrapper />}>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/api-explorer" element={<APIExplorer />} />
         </Route>
         <Route path="/login" element={<LoginPage mode="login" />} />
         <Route path="/signup" element={<LoginPage mode="signup" />} />

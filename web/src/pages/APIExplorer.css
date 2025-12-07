@@ -1,0 +1,57 @@
+.api-explorer-container {
+    background-color: #121212;
+    /* Dark background matching the app theme */
+    color: #e0e0e0;
+    min-height: 100vh;
+}
+
+.api-explorer-container h1,
+.api-explorer-container h3 {
+    color: #ffffff;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+.presets button,
+.request-builder button {
+    background-color: #333;
+    color: white;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 8px 16px;
+    margin-right: 10px;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.presets button:hover,
+.request-builder button:hover {
+    background-color: #444;
+}
+
+.presets button:active,
+.request-builder button:active {
+    transform: scale(0.98);
+}
+
+.request-builder select,
+.request-builder input,
+.request-builder textarea {
+    background-color: #1e1e1e;
+    border: 1px solid #444;
+    color: #e0e0e0;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 14px;
+}
+
+.request-builder select:focus,
+.request-builder input:focus,
+.request-builder textarea:focus {
+    outline: none;
+    border-color: #888;
+}
+
+.response-viewer div {
+    border: 1px solid #333;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}

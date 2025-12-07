@@ -744,6 +744,7 @@ func newTokenStoreFromConfig(cfg *Config) tokenStore {
 		}
 	}
 
+	log.Printf("using in-memory token store (persistence=%s)", cfg.Persistence)
 	return newMemoryTokenStore(200)
 }
 

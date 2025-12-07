@@ -19,7 +19,7 @@ const Dashboard = () => {
         let intervalId;
         if (isActive) {
             fetchMatches();
-            intervalId = setInterval(fetchMatches, 10 * 1000); // 10 minutes
+            intervalId = setInterval(fetchMatches, 20 * 1000); // 10 minutes
         }
         return () => {
             if (intervalId) clearInterval(intervalId);

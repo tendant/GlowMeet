@@ -647,17 +647,17 @@ func (s *tweetStore) get(userID string) []string {
 	return append([]string(nil), tweets...)
 }
 
-func (s *tweetStore) shouldFetch(userID string, minInterval time.Duration) bool {
+func (s *tweetStore) shouldFetch(userID string, minInterval time.Duration) (bool, time.Time) {
 	if userID == "" {
-		return false
+		return false, time.Time{}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	last, ok := s.lastFetched[userID]
 	if !ok {
-		return true
+		return true, time.Time{}
 	}
-	return time.Since(last) > minInterval
+	return time.Since(last) > minInterval, last
 }
 
 func (s *server) fetchXUser(ctx context.Context, accessToken string) (userProfile, error) {
@@ -699,7 +699,11 @@ func (s *server) fetchUserTweets(userID, accessToken string) {
 	if userID == "" || accessToken == "" {
 		return
 	}
-	if !s.tweets.shouldFetch(userID, 15*time.Minute) {
+	ok, last := s.tweets.shouldFetch(userID, 15*time.Minute)
+	if !ok {
+		if !last.IsZero() {
+			log.Printf("fetch tweets skip user=%s recently_fetched=%s", userID, last.Format(time.RFC3339))
+		}
 		return
 	}
 	log.Printf("fetch tweets start user=%s", userID)

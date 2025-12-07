@@ -140,6 +140,11 @@ const Dashboard = () => {
                             <span className="orb-score">
                                 {Math.round(match.matching_score)}%
                             </span>
+                            {typeof match.distance_ft === 'number' && (
+                                <span className="orb-distance" style={{ fontSize: '0.8rem', marginTop: '2px', color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
+                                    {Math.round(match.distance_ft).toLocaleString()} ft
+                                </span>
+                            )}
                         </div>
                     );
                 })}

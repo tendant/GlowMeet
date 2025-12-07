@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"glowmeet/location"
+	"glowmeet/matching"
 	"glowmeet/xai"
 	"io"
 	"log"
@@ -51,12 +53,13 @@ type stateStore struct {
 }
 
 type server struct {
-	config *Config
-	oauth  *oauth2.Config
-	states *stateStore
-	users  *userStore
-	tokens *tokenStore
-	tweets *tweetStore
+	config  *Config
+	oauth   *oauth2.Config
+	states  *stateStore
+	users   *userStore
+	tokens  *tokenStore
+	tweets  *tweetStore
+	matcher *matching.Service
 }
 
 func main() {
@@ -118,10 +121,11 @@ func newServer(cfg *Config) *server {
 				TokenURL: "https://api.twitter.com/2/oauth2/token",
 			},
 		},
-		states: newStateStore(10 * time.Minute),
-		users:  newUserStore(50),
-		tokens: newTokenStore(200),
-		tweets: newTweetStore(50),
+		states:  newStateStore(10 * time.Minute),
+		users:   newUserStore(500),
+		tokens:  newTokenStore(500),
+		tweets:  newTweetStore(50),
+		matcher: matching.NewService(cfg.XAiAPIKey),
 	}
 
 	s.seedUsers()
@@ -233,7 +237,7 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 	} else if profile.ID != "" {
 		log.Printf("req_id=%s profile fetched login id=%s username=%s", middleware.GetReqID(r.Context()), profile.ID, profile.Username)
 		s.users.upsert(profile)
-		go s.fetchUserTweets(profile.ID, token.AccessToken)
+		go s.fetchUserTweets(profile.ID, token.AccessToken) // This will trigger XAI analysis -> then trigger matching
 	}
 
 	s.tokens.upsert(sessionID, tokenInfo{
@@ -309,7 +313,8 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
-	users := s.users.top(20)
+	_, _, viewerID := s.resolveAccessToken(r)
+
 	type userSummary struct {
 		UserID        string   `json:"user_id"`
 		Name          string   `json:"name,omitempty"`
@@ -317,40 +322,110 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 		ProfileImage  string   `json:"profile_image_url,omitempty"`
 		Lat           float64  `json:"lat,omitempty"`
 		Long          float64  `json:"long,omitempty"`
+		Distance      *float64 `json:"distance_ft,omitempty"` // Pointer to allow null if calculating failed
 		MatchingScore float64  `json:"matching_score,omitempty"`
+		MatchReason   string   `json:"match_reason,omitempty"`
 		Summary       string   `json:"summary,omitempty"`
 		Description   string   `json:"description,omitempty"`
 		Tweets        []string `json:"tweets,omitempty"`
 		Interests     string   `json:"interests,omitempty"`
 	}
 
-	out := make([]userSummary, 0, len(users))
-	for _, u := range users {
-		tweets := s.tweets.get(u.ID)
-		out = append(out, userSummary{
-			UserID:        u.ID,
-			Name:          u.Name,
-			Username:      u.Username,
-			ProfileImage:  u.ProfileImageURL,
-			Lat:           u.Lat,
-			Long:          u.Long,
-			MatchingScore: u.MatchingScore,
-			Summary:       u.Summary,
-			Description:   u.Description,
-			Interests:     u.Interests,
-			// Return a sample tweet text to give clients something to show.
-			// Full list available via /api/me.
-			// Avoid large payloads by sending only the first tweet text if present.
-			// Keep field name as tweets for consistency.
-			// Empty slice omitted by JSON encoder.
-			// Use inline literal to avoid restructuring API.
-			Tweets: func() []string {
-				if len(tweets) > 0 {
-					return []string{tweets[0]}
+	var out []userSummary
+
+	// Viewer location for distance calc
+	var viewerLat, viewerLong float64
+	var hasViewerLoc bool
+	if viewerID != "" {
+		if v, ok := s.users.get(viewerID); ok {
+			viewerLat = v.Lat
+			viewerLong = v.Long
+			// valid if not 0,0 (simplistic check, but 0,0 is in ocean mostly)
+			if viewerLat != 0 || viewerLong != 0 {
+				hasViewerLoc = true
+			}
+		}
+	}
+
+	// 1. Try to get Top Matches if logged in
+	if viewerID != "" {
+		matches := s.matcher.GetTopMatches(viewerID, 5)
+		if len(matches) > 0 {
+			out = make([]userSummary, 0, len(matches))
+			for _, m := range matches {
+				u, ok := s.users.get(m.TargetID)
+				if !ok {
+					continue
 				}
-				return nil
-			}(),
-		})
+
+				var dist *float64
+				if hasViewerLoc && (u.Lat != 0 || u.Long != 0) {
+					d := location.CalculateDistance(viewerLat, viewerLong, u.Lat, u.Long)
+					dist = &d
+				}
+
+				tweets := s.tweets.get(u.ID)
+				out = append(out, userSummary{
+					UserID:        u.ID,
+					Name:          u.Name,
+					Username:      u.Username,
+					ProfileImage:  u.ProfileImageURL,
+					Lat:           u.Lat,
+					Long:          u.Long,
+					Distance:      dist,
+					MatchingScore: m.Score,
+					MatchReason:   m.Reason,
+					Summary:       u.Summary,
+					Description:   u.Description,
+					Interests:     u.Interests,
+					Tweets: func() []string {
+						if len(tweets) > 0 {
+							return []string{tweets[0]}
+						}
+						return nil
+					}(),
+				})
+			}
+		}
+	}
+
+	// 2. Fallback to default top 5 if no specific matches found
+	if len(out) == 0 {
+		users := s.users.top(5)
+		out = make([]userSummary, 0, len(users))
+		for _, u := range users {
+			// Skip self if logged in (optional but good UI)
+			if u.ID == viewerID {
+				continue
+			}
+
+			var dist *float64
+			if hasViewerLoc && (u.Lat != 0 || u.Long != 0) {
+				d := location.CalculateDistance(viewerLat, viewerLong, u.Lat, u.Long)
+				dist = &d
+			}
+
+			tweets := s.tweets.get(u.ID)
+			out = append(out, userSummary{
+				UserID:        u.ID,
+				Name:          u.Name,
+				Username:      u.Username,
+				ProfileImage:  u.ProfileImageURL,
+				Lat:           u.Lat,
+				Long:          u.Long,
+				Distance:      dist,
+				MatchingScore: u.MatchingScore,
+				Summary:       u.Summary,
+				Description:   u.Description,
+				Interests:     u.Interests,
+				Tweets: func() []string {
+					if len(tweets) > 0 {
+						return []string{tweets[0]}
+					}
+					return nil
+				}(),
+			})
+		}
 	}
 
 	writeJSON(w, http.StatusOK, out)
@@ -374,7 +449,28 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		user.Tweets = s.tweets.get(user.ID)
 	}
 
-	writeJSON(w, http.StatusOK, user)
+	// Calculate/Fetch Match Score if viewer is logged in
+	_, _, viewerID := s.resolveAccessToken(r)
+
+	// Define response structure that flattens userProfile fields
+	// and adds an optional Match field.
+	type userResponse struct {
+		userProfile
+		Match *matching.MatchResult `json:"match_info,omitempty"`
+	}
+
+	var match *matching.MatchResult
+	if viewerID != "" && viewerID != user.ID {
+		m := s.matcher.GetMatch(viewerID, user.ID)
+		if m.Score > 0 {
+			match = &m
+		}
+	}
+
+	writeJSON(w, http.StatusOK, userResponse{
+		userProfile: user,
+		Match:       match,
+	})
 }
 
 func (s *server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
@@ -634,6 +730,26 @@ func (s *userStore) top(n int) []userProfile {
 		}
 	}
 	return result
+}
+
+func (s *userStore) getAllAsInputs() []matching.UserInput {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]matching.UserInput, 0, len(s.data))
+	for _, u := range s.data {
+		out = append(out, matching.UserInput{
+			ID:        u.ID,
+			Name:      u.Name,
+			Username:  u.Username,
+			Summary:   u.Summary,
+			Interests: u.Interests,
+			// Tweets are stored separately, populated by caller if needed,
+			// but for simplistic bulk matching we might skip full tweet text
+			// if Summary/Interests are the main driver, or we look them up.
+			// The matching service expects Tweets.
+		})
+	}
+	return out
 }
 
 func (s *userStore) updateXAIData(userID, summary, imageURL string, score float64) {
@@ -935,6 +1051,38 @@ Output purely JSON in the following format:
 	}
 
 	s.users.updateXAIData(userID, result.Summary, imageURL, result.Score)
+
+	// After XAI analysis updates the user summary, trigger the Pairwise Matching.
+	// This ensures we have the latest summary to compare against others.
+	go s.triggerMatching(userID, tweets)
+}
+
+func (s *server) triggerMatching(userID string, userTweets []string) {
+	candidates := s.users.getAllAsInputs()
+
+	// Populate tweets for candidates (expensive loop map lookup but ok for 50 users)
+	// Also create the 'primary' input
+	var primary matching.UserInput
+
+	// Fill tweets for candidates
+	for i := range candidates {
+		candidates[i].Tweets = s.tweets.get(candidates[i].ID)
+		if candidates[i].ID == userID {
+			primary = candidates[i]
+			// Ensure primary has the tweets we just fetched/used
+			if len(primary.Tweets) == 0 {
+				primary.Tweets = userTweets
+			}
+		}
+	}
+
+	if primary.ID == "" {
+		// Should have been in the list
+		return
+	}
+
+	// Trigger background matching
+	s.matcher.CalculateMatchesAsync(primary, candidates)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {

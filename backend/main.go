@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"glowmeet/xai"
 	"io"
 	"log"
 	"net/http"
@@ -316,6 +317,7 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 		Lat           float64  `json:"lat,omitempty"`
 		Long          float64  `json:"long,omitempty"`
 		MatchingScore float64  `json:"matching_score,omitempty"`
+		Summary       string   `json:"summary,omitempty"`
 		Description   string   `json:"description,omitempty"`
 		Tweets        []string `json:"tweets,omitempty"`
 	}
@@ -331,6 +333,7 @@ func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
 			Lat:           u.Lat,
 			Long:          u.Long,
 			MatchingScore: u.MatchingScore,
+			Summary:       u.Summary,
 			Description:   u.Description,
 			// Return a sample tweet text to give clients something to show.
 			// Full list available via /api/me.
@@ -573,6 +576,16 @@ func (s *userStore) top(n int) []userProfile {
 	return result
 }
 
+func (s *userStore) updateXAIData(userID, summary string, score float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if user, ok := s.data[userID]; ok {
+		user.Summary = summary
+		user.MatchingScore = score
+		s.data[userID] = user
+	}
+}
+
 func (s *userStore) updateLocation(userID string, lat, long float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -710,7 +723,7 @@ func (s *server) fetchUserTweets(userID, accessToken string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	url := fmt.Sprintf("https://api.twitter.com/2/users/%s/tweets?max_results=5&tweet.fields=created_at,text", userID)
+	url := fmt.Sprintf("https://api.twitter.com/2/users/%s/tweets?max_results=100&tweet.fields=created_at,text", userID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		log.Printf("fetch tweets build request err for user=%s: %v", userID, err)
@@ -751,6 +764,75 @@ func (s *server) fetchUserTweets(userID, accessToken string) {
 	}
 	log.Printf("fetched %d tweets for user=%s", len(texts), userID)
 	s.tweets.set(userID, texts)
+
+	// call xai
+	go s.callXAIAnalysis(userID, texts)
+}
+
+func (s *server) callXAIAnalysis(userID string, tweets []string) {
+	if s.config.XAiAPIKey == "" {
+		log.Printf("skipping xai analysis for user=%s: api key missing", userID)
+		return
+	}
+	if len(tweets) == 0 {
+		return
+	}
+
+	client := xai.NewClient(s.config.XAiAPIKey)
+
+	// Combine first 50 tweets for context (to fit well within prompt limits while being comprehensive)
+	limit := 50
+	if len(tweets) < limit {
+		limit = len(tweets)
+	}
+	contextText := strings.Join(tweets[:limit], "\n- ")
+
+	prompt := fmt.Sprintf(`Analyze the following tweets from a user:
+- %s
+
+Generate a short 2-sentence summary of who they are. 
+Also provide a 'matching score' from 0-100 indicating how socially engaging they seem based on their content. 
+Output purely JSON in the following format:
+{"summary": "...", "score": 85.5}`, contextText)
+
+	// Using CreateChatCompletion as we want JSON output which is easier with standard chat.
+	// Ideally we'd use Structured Output if available, but here we'll parse the string.
+	req := xai.ChatRequest{
+		Model: xai.ModelGrok41Fast, // Use fast model for analysis
+		Messages: []xai.Message{
+			{Role: "user", Content: prompt},
+		},
+	}
+
+	resp, err := client.CreateChatCompletion(context.Background(), req)
+	if err != nil {
+		log.Printf("xai analysis failed for user=%s: %v", userID, err)
+		return
+	}
+
+	if len(resp.Choices) == 0 {
+		return
+	}
+
+	content := resp.Choices[0].Message.Content
+	// Try to find JSON block if wrapped
+	start := strings.Index(content, "{")
+	end := strings.LastIndex(content, "}")
+	if start != -1 && end != -1 && end > start {
+		content = content[start : end+1]
+	}
+
+	var result struct {
+		Summary string  `json:"summary"`
+		Score   float64 `json:"score"`
+	}
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		log.Printf("xai analysis json parse failed for user=%s: %v content=%s", userID, err, content)
+		return
+	}
+
+	log.Printf("xai analysis complete for user=%s: score=%.1f", userID, result.Score)
+	s.users.updateXAIData(userID, result.Summary, result.Score)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {

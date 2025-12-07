@@ -102,7 +102,7 @@ func loadConfig() (*Config, error) {
 }
 
 func newServer(cfg *Config) *server {
-	return &server{
+	s := &server{
 		config: cfg,
 		oauth: &oauth2.Config{
 			ClientID:     cfg.ClientID,
@@ -118,6 +118,9 @@ func newServer(cfg *Config) *server {
 		users:  newUserStore(50),
 		tokens: newTokenStore(200),
 	}
+
+	s.seedUsers()
+	return s
 }
 
 func (s *server) routes() http.Handler {
@@ -653,6 +656,49 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (s *server) seedUsers() {
+	s.users.upsert(userProfile{
+		ID:              "10001",
+		Name:            "Ada Lovelace",
+		Username:        "ada",
+		ProfileImageURL: "https://placehold.co/64x64",
+		Description:     "Mathematician and visionary.",
+		MatchingScore:   98.4,
+		Lat:             37.7749,
+		Long:            -122.4194,
+	})
+	s.users.upsert(userProfile{
+		ID:              "10002",
+		Name:            "Alan Turing",
+		Username:        "aturing",
+		ProfileImageURL: "https://placehold.co/64x64",
+		Description:     "Computing pioneer and problem solver.",
+		MatchingScore:   95.1,
+		Lat:             51.5074,
+		Long:            -0.1278,
+	})
+	s.users.upsert(userProfile{
+		ID:              "10003",
+		Name:            "Grace Hopper",
+		Username:        "ghopper",
+		ProfileImageURL: "https://placehold.co/64x64",
+		Description:     "COBOL creator and Navy rear admiral.",
+		MatchingScore:   93.7,
+		Lat:             40.7128,
+		Long:            -74.0060,
+	})
+	s.users.upsert(userProfile{
+		ID:              "10004",
+		Name:            "Katherine Johnson",
+		Username:        "kjohnson",
+		ProfileImageURL: "https://placehold.co/64x64",
+		Description:     "NASA mathematician who helped send humans to space.",
+		MatchingScore:   92.5,
+		Lat:             38.9072,
+		Long:            -77.0369,
+	})
 }
 
 func (s *server) resolveAccessToken(r *http.Request) (string, string, string) {

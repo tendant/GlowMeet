@@ -331,7 +331,7 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
-	_, _, viewerID := s.resolveAccessToken(r)
+	viewerID := s.resolveAccessToken(r)
 
 	type userSummary struct {
 		UserID        string   `json:"user_id"`
@@ -437,7 +437,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Calculate/Fetch Match Score if viewer is logged in
-	_, _, viewerID := s.resolveAccessToken(r)
+	viewerID := s.resolveAccessToken(r)
 
 	// Define response structure that flattens userProfile fields
 	// and adds an optional Match field.

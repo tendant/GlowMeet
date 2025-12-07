@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -46,6 +47,7 @@ type server struct {
 	config *Config
 	oauth  *oauth2.Config
 	states *stateStore
+	users  *userStore
 }
 
 func main() {
@@ -67,7 +69,7 @@ func main() {
 
 func loadConfig() (*Config, error) {
 	cfg := &Config{
-		Port:          getEnv("PORT", "8080"),
+		Port:          getEnv("PORT", "8000"),
 		ClientID:      os.Getenv("X_CLIENT_ID"),
 		ClientSecret:  os.Getenv("X_CLIENT_SECRET"),
 		RedirectURL:   os.Getenv("X_REDIRECT_URL"),
@@ -102,6 +104,7 @@ func newServer(cfg *Config) *server {
 			},
 		},
 		states: newStateStore(10 * time.Minute),
+		users:  newUserStore(50),
 	}
 }
 
@@ -126,6 +129,11 @@ func (s *server) routes() http.Handler {
 	r.Route("/auth/x", func(r chi.Router) {
 		r.Get("/login", s.handleXLogin)
 		r.Get("/callback", s.handleXCallback)
+	})
+
+	r.Route("/api", func(r chi.Router) {
+		r.Get("/me", s.handleMe)
+		r.Get("/users", s.handleUsers)
 	})
 
 	return r
@@ -189,6 +197,13 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	profile, err := s.fetchXUser(ctx, token.AccessToken)
+	if err != nil {
+		logError(r, "failed fetching X profile after login", err)
+	} else {
+		s.users.upsert(profile)
+	}
+
 	secureCookie := strings.HasPrefix(strings.ToLower(s.config.RedirectURL), "https")
 	http.SetCookie(w, &http.Cookie{
 		Name:     "access_token",
@@ -212,6 +227,32 @@ func (s *server) handleXCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, s.config.FrontendURL, http.StatusFound)
+}
+
+func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
+	tokenCookie, err := r.Cookie("access_token")
+	if err != nil || tokenCookie.Value == "" {
+		writeError(w, http.StatusUnauthorized, "missing access token")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	profile, err := s.fetchXUser(ctx, tokenCookie.Value)
+	if err != nil {
+		logError(r, "failed to fetch profile", err)
+		writeError(w, http.StatusBadGateway, "failed to fetch profile")
+		return
+	}
+
+	s.users.upsert(profile)
+	writeJSON(w, http.StatusOK, profile)
+}
+
+func (s *server) handleUsers(w http.ResponseWriter, r *http.Request) {
+	users := s.users.top(20)
+	writeJSON(w, http.StatusOK, users)
 }
 
 func newStateStore(ttl time.Duration) *stateStore {
@@ -268,6 +309,89 @@ func pkceChallenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
+type userProfile struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Username        string `json:"username"`
+	ProfileImageURL string `json:"profile_image_url,omitempty"`
+}
+
+type userStore struct {
+	mu   sync.Mutex
+	lim  int
+	data map[string]userProfile
+}
+
+func newUserStore(limit int) *userStore {
+	return &userStore{
+		lim:  limit,
+		data: make(map[string]userProfile),
+	}
+}
+
+func (s *userStore) upsert(u userProfile) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data[u.ID] = u
+	if len(s.data) > s.lim {
+		// trim oldest by deleting arbitrary entries when limit exceeded
+		for k := range s.data {
+			delete(s.data, k)
+			if len(s.data) <= s.lim {
+				break
+			}
+		}
+	}
+}
+
+func (s *userStore) top(n int) []userProfile {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result := make([]userProfile, 0, min(n, len(s.data)))
+	for _, u := range s.data {
+		result = append(result, u)
+		if len(result) >= n {
+			break
+		}
+	}
+	return result
+}
+
+func (s *server) fetchXUser(ctx context.Context, accessToken string) (userProfile, error) {
+	if accessToken == "" {
+		return userProfile{}, errors.New("missing access token")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.twitter.com/2/users/me?user.fields=profile_image_url,name,username", nil)
+	if err != nil {
+		return userProfile{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return userProfile{}, err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return userProfile{}, fmt.Errorf("x.com user fetch failed: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	var payload struct {
+		Data userProfile `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return userProfile{}, err
+	}
+	if payload.Data.ID == "" {
+		return userProfile{}, errors.New("missing id in x.com response")
+	}
+	return payload.Data, nil
+}
+
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -317,4 +441,11 @@ func requestMetaLogger(next http.Handler) http.Handler {
 		)
 		next.ServeHTTP(w, r)
 	})
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

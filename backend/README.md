@@ -12,6 +12,8 @@ Golang chi demo that handles X.com OAuth login with PKCE.
 
 - `GET /health` — readiness probe.  
 - `GET /auth/x/login` — returns `authorization_url` and `state` you can redirect the user to.  
-- `GET /auth/x/callback?code=...&state=...` — exchanges the code using the stored PKCE verifier; responds with access/refresh tokens.
+- `GET /auth/x/callback?code=...&state=...` — exchanges the code using the stored PKCE verifier; sets `access_token` (+ `refresh_token` if present) cookies and redirects to `FRONTEND_URL`.  
+- `GET /api/me` — uses `access_token` cookie to fetch the user profile from X.com and returns it.  
+- `GET /api/users` — returns up to 20 recently seen users (in-memory list).
 
-State + PKCE verifiers live in-memory with a 10 minute TTL; wire your own session or persistence layer for production.
+State + PKCE verifiers + user list live in-memory; wire your own session or persistence layer for production.
